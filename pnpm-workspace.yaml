@@ -2,12 +2,12 @@ packages:
   - apps/*
   - packages/*
 
+# pnpm 11: los paquetes con postinstall tienen que estar aprobados explícitamente
+# o `pnpm install` falla con ERR_PNPM_IGNORED_BUILDS.
+#   esbuild  -> lo usan vitest y astro
+#   sharp    -> optimización de imágenes de astro
+#   workerd  -> el runtime de wrangler
 allowBuilds:
-  esbuild: set this to true or false
-  sharp: set this to true or false
+  esbuild: true
+  sharp: true
   workerd: true
-
-onlyBuiltDependencies:
-  - esbuild
-  - sharp
-  - workerd
