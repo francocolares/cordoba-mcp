@@ -68,41 +68,38 @@ jobs:
           workingDirectory: apps/worker
           command: deploy
 
+      # `deployment-url` de wrangler-action no siempre es una URL usable: con un
+      # Custom Domain devuelve "cordobamcp.com (custom domain)", sin esquema y con
+      # el sufijo literal. Lo normalizamos y reintentamos, porque un certificado
+      # recién emitido puede tardar un rato en responder.
       - name: Smoke test del MCP desplegado
         env:
           URL: ${{ steps.deploy.outputs.deployment-url }}
-        run: |
-          set -euo pipefail
-          BASE="${URL:-}"
-          if [ -z "$BASE" ]; then
-            echo "wrangler no devolvió la URL del deploy; salteo el smoke test."
-            exit 0
-          fi
-          echo "Verificando $BASE"
-          curl -fsS "$BASE/health" | tee /dev/stderr | grep -q '"ok": true'
-          node apps/worker/smoke.mjs "$BASE/mcp"
-
-      # Chequeo del dominio propio. Opcional a propósito: en el primer deploy el
-      # Custom Domain tarda unos minutos en emitir el certificado, y no queremos
-      # un run rojo por eso. Activalo poniendo la variable de repo
-      # PROD_URL=https://cordobamcp.com cuando el dominio ya responda.
-      - name: Verificar el dominio de producción
-        if: vars.PROD_URL != ''
-        env:
           PROD_URL: ${{ vars.PROD_URL }}
         run: |
           set -euo pipefail
-          echo "Verificando $PROD_URL"
-          for i in $(seq 1 12); do
-            if curl -fsS "$PROD_URL/health" | grep -q '"ok": true'; then
-              echo "OK en el intento $i"
-              node apps/worker/smoke.mjs "$PROD_URL/mcp"
+          RAW="${PROD_URL:-${URL:-}}"
+          BASE=$(printf '%s' "$RAW" | sed -E 's/[[:space:]]*\(custom domain\)[[:space:]]*//' | tr -d '[:space:]')
+          if [ -z "$BASE" ]; then
+            echo "::warning::no hay URL para verificar (deployment-url vacío y PROD_URL sin definir)"
+            exit 0
+          fi
+          case "$BASE" in
+            http://* | https://*) ;;
+            *) BASE="https://$BASE" ;;
+          esac
+          echo "Verificando $BASE"
+          for i in $(seq 1 18); do
+            if curl -fsS --max-time 10 "$BASE/health" | tee /dev/stderr | grep -q '"ok": true'; then
+              echo "/health OK en el intento $i"
+              node apps/worker/smoke.mjs "$BASE/mcp"
+              echo "SMOKE_URL=$BASE" >> "$GITHUB_ENV"
               exit 0
             fi
             echo "intento $i sin respuesta; reintento en 10s"
             sleep 10
           done
-          echo "::error::$PROD_URL no respondió tras 2 minutos"
+          echo "::error::$BASE no respondió tras 3 minutos. Si es el primer deploy con dominio propio, puede ser el certificado del Custom Domain todavía emitiéndose: reintentá el job."
           exit 1
 
       - name: Resumen
@@ -114,8 +111,8 @@ jobs:
           {
             echo "### Deploy a Cloudflare"
             echo
-            echo "- workers.dev: ${URL:-(no informada)}"
-            echo "- Producción: ${PROD_URL:-(dominio no configurado)}"
-            echo "- MCP: ${PROD_URL:+$PROD_URL/mcp}${PROD_URL:-${URL:-}/mcp}"
+            echo "- Desplegado: ${URL:-(no informado)}"
+            echo "- Verificado: ${SMOKE_URL:-(no verificado)}"
+            echo "- MCP: ${SMOKE_URL:+$SMOKE_URL/mcp}"
             echo "- Eventos: $(wc -l < data/events.jsonl)"
           } >> "$GITHUB_STEP_SUMMARY"

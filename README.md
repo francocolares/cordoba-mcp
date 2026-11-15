@@ -227,9 +227,10 @@ Con dominio propio el token necesita además, **acotado a la zona `cordobamcp.co
 `Zone → Workers Routes: Edit` y `Zone → Zone: Read`. La plantilla _Edit Cloudflare Workers_ ya los
 trae; un custom token mínimo, no, y el deploy falla al crear la ruta.
 
-Y una **variable** (no secret) opcional, `PROD_URL`: si está, el deploy verifica además el dominio
-propio con reintentos. Dejala sin definir hasta que el Custom Domain responda, así el primer deploy
-no queda en rojo esperando el certificado.
+El smoke test posterior al deploy usa el `deployment-url` que informa `wrangler-action`, que con un
+Custom Domain viene como `cordobamcp.com (custom domain)` —sin esquema y con el sufijo literal—, así
+que el workflow lo normaliza y reintenta 3 minutos (un certificado recién emitido tarda en
+responder). Si querés forzar otra URL, definí la **variable** (no secret) `PROD_URL`:
 
 ```
 PROD_URL = https://cordobamcp.com
