@@ -1,0 +1,26 @@
+{
+  "name": "@cordoba/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "embed-data": "node scripts/embed-data.mjs",
+    "build": "pnpm run embed-data && tsc --noEmit && wrangler deploy --dry-run --outdir dist",
+    "typecheck": "pnpm run embed-data && tsc --noEmit",
+    "dev": "pnpm run embed-data && wrangler dev",
+    "deploy": "pnpm run embed-data && wrangler deploy",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "@cordoba/core": "workspace:*",
+    "zod": "^3.25.0",
+    "zod-to-json-schema": "^3.24.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251101.0",
+    "typescript": "^5.9.0",
+    "wrangler": "^4.42.0",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "@cordoba/web": "workspace:*"
+  }
+}

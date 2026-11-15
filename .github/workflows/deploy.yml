@@ -1,0 +1,86 @@
+name: deploy-cloudflare
+
+# Despliega el Worker (landing de Astro + MCP en /mcp) con los datos embebidos.
+# Lo dispara: un push a main, la Action del scraper cuando commitea datos nuevos,
+# o a mano con workflow_dispatch.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "data/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm test
+
+      # Compila core -> web -> worker (el worker embebe data/ y valida el bundle).
+      - run: pnpm build
+
+      - id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/worker
+          command: deploy
+
+      - name: Smoke test del MCP desplegado
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          set -euo pipefail
+          BASE="${URL:-}"
+          if [ -z "$BASE" ]; then
+            echo "wrangler no devolvió la URL del deploy; salteo el smoke test."
+            exit 0
+          fi
+          echo "Verificando $BASE"
+          curl -fsS "$BASE/health" | tee /dev/stderr | grep -q '"ok": true'
+          node apps/worker/smoke.mjs "$BASE/mcp"
+
+      - name: Resumen
+        if: always()
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          {
+            echo "### Deploy a Cloudflare"
+            echo
+            echo "- URL: ${URL:-(no informada)}"
+            echo "- MCP: ${URL:-}/mcp"
+            echo "- Eventos: $(wc -l < data/events.jsonl)"
+          } >> "$GITHUB_STEP_SUMMARY"

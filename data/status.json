@@ -1,0 +1,45 @@
+{
+  "last_run": "2026-11-13T00:44:16.840Z",
+  "validation": {
+    "at": "2026-11-13T00:44:16.840Z",
+    "status": "ok",
+    "checks": [
+      {
+        "level": "ok",
+        "code": "page_ok",
+        "message": "La página de la agenda responde 200"
+      },
+      {
+        "level": "ok",
+        "code": "bundle_present",
+        "message": "Bundle presente: https://documentos.cordoba.gob.ar/MUNCBA/plugins/agenda-cultura/main.js?a=1"
+      },
+      {
+        "level": "ok",
+        "code": "sheet_id_ok",
+        "message": "El sheet ID sigue siendo el mismo"
+      },
+      {
+        "level": "ok",
+        "code": "schema_ok",
+        "message": "Esquema sin cambios (15 columnas)"
+      }
+    ],
+    "schema_hash": "aa2db88fa6f94b61",
+    "bundle_hash": "5f193dc82990382d438679c90a7fb9f3650619e36628024cbbb051ca86e24d15",
+    "row_count": 86
+  },
+  "scraped": true,
+  "counts": {
+    "total": 86,
+    "active": 86,
+    "inactive": 0,
+    "added": 0,
+    "updated": 0,
+    "removed": 0,
+    "readded": 0
+  },
+  "source": "Agenda Turística – Municipalidad de Córdoba (turismo_muni) – https://turismo.cordoba.gob.ar/agenda-turistica/",
+  "schema_hash": "aa2db88fa6f94b61",
+  "bundle_hash": "5f193dc82990382d438679c90a7fb9f3650619e36628024cbbb051ca86e24d15"
+}

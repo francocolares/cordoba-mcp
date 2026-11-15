@@ -1,13 +1,52 @@
 ---
+import { AGENDA_URL, loadDataset, SOURCE_NAME, searchEvents, toSummary } from "@cordoba/core";
+
+const dataset = await loadDataset({
+  path: new URL("../../../../data/events.jsonl", import.meta.url).pathname,
+}).catch(() => ({ events: [], status: null, data_as_of: "", loaded_at: 0 }));
+const events = searchEvents(dataset.events, { limit: 60 }).map(toSummary);
+const fmt = new Intl.DateTimeFormat("es-AR", {
+  dateStyle: "full",
+  timeStyle: "short",
+  timeZone: "America/Argentina/Cordoba",
+});
 ---
 
 <html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width" />
-    <title>Córdoba MCP</title>
+    <title>Agenda de Córdoba</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.5; }
+      h1 { margin-bottom: 0.25rem; }
+      .meta { opacity: 0.7; font-size: 0.9rem; }
+      ul { list-style: none; padding: 0; }
+      li { border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); padding: 0.85rem 0; }
+      .when { font-variant-numeric: tabular-nums; font-size: 0.85rem; opacity: 0.75; }
+      .tag { font-size: 0.75rem; border: 1px solid currentColor; border-radius: 999px; padding: 0 0.5rem; opacity: 0.7; }
+      .free { font-weight: 600; }
+    </style>
   </head>
   <body>
-    <h1>Córdoba MCP</h1>
+    <h1>Agenda de Córdoba</h1>
+    <p class="meta">
+      Datos de <a href={AGENDA_URL}>{SOURCE_NAME}</a>.
+      {dataset.data_as_of && <span>Actualizado: {dataset.data_as_of}</span>}
+      — {events.length} eventos próximos.
+    </p>
+    {events.length === 0 && <p>No hay datos todavía: corré <code>pnpm scrape</code>.</p>}
+    <ul>
+      {events.map((e) => (
+        <li>
+          <div class="when">{fmt.format(new Date(e.start))}</div>
+          <strong>{e.title}</strong>
+          {" "}<span class="tag">{e.category}</span>
+          {e.price_type === "gratis" && <span class="free"> · gratis</span>}
+          {e.venue && <div class="meta">{e.venue}</div>}
+        </li>
+      ))}
+    </ul>
   </body>
 </html>

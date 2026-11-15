@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agenda-cordoba": {
+      "command": "node",
+      "args": ["apps/mcp/dist/index.js"],
+      "env": {
+        "AGENDA_DATA_PATH": "data/events.jsonl"
+      }
+    }
+  }
+}

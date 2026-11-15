@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cordoba-agenda",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-11-01",
+  // La landing de Astro se sirve como assets estáticos; el Worker sólo
+  // intercepta /mcp, /health y /api/*.
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -1,0 +1,90 @@
+name: scrape-agenda
+
+on:
+  schedule:
+    - cron: "17 9 * * *" # 06:17 hora de Córdoba (UTC-3); minuto no redondo a propósito
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: scrape-agenda
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+      - id: validate
+        run: node apps/scraper/dist/index.js validate | tee validation.json
+
+      - name: Abrir issue si la validación falló
+        if: failure() && steps.validate.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.existsSync('validation.json')
+              ? fs.readFileSync('validation.json', 'utf8')
+              : 'sin salida';
+            const title = 'La fuente de la agenda cambió o falló la validación';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'scraper-alert',
+            });
+            if (!open.data.some((i) => i.title === title)) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['scraper-alert'],
+                body: '```json\n' + body + '\n```',
+              });
+            }
+
+      - run: node apps/scraper/dist/index.js scrape
+
+      - name: Commitear data/
+        id: commit
+        run: |
+          git config user.name "agenda-bot"
+          git config user.email "agenda-bot@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Sin cambios en data/."
+          else
+            git commit -m "data: agenda $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Los push hechos con GITHUB_TOKEN no disparan workflows, así que llamamos al
+  # deploy explícitamente cuando el scrape dejó datos nuevos.
+  deploy:
+    needs: scrape
+    if: needs.scrape.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

@@ -2,8 +2,8 @@ node_modules/
 dist/
 .turbo/
 .astro/
+.wrangler/
 *.log
 .env
 .env.*
 !.env.example
-data/
