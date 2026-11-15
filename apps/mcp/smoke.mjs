@@ -1,10 +1,20 @@
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+// Paths absolutos: así corre igual desde la raíz (`node apps/mcp/smoke.mjs`) que
+// con pnpm, que pone el cwd en apps/mcp.
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(here, "..", "..");
+
 const transport = new StdioClientTransport({
   command: "node",
-  args: ["apps/mcp/dist/index.js"],
-  env: { ...process.env, AGENDA_DATA_PATH: "data/events.jsonl" },
+  args: [join(here, "dist", "index.js")],
+  env: {
+    ...process.env,
+    AGENDA_DATA_PATH: process.env.AGENDA_DATA_PATH ?? join(repoRoot, "data", "events.jsonl"),
+  },
 });
 const client = new Client({ name: "smoke", version: "0" });
 await client.connect(transport);

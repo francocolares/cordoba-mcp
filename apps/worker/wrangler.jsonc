@@ -10,6 +10,13 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page"
   },
+  // Dominio propio: un único hostname para todo (landing, /mcp, /health, /api/*),
+  // que es lo que el ruteo por path ya permite sin código extra.
+  // El Custom Domain crea el registro DNS y emite el certificado solo, pero la
+  // zona tiene que estar en la MISMA cuenta de Cloudflare que el Worker.
+  // `workers.dev` queda activo a propósito: la Action usa esa URL para el smoke
+  // test inmediato, sin esperar la propagación del dominio.
+  "routes": [{ "pattern": "cordobamcp.com", "custom_domain": true }],
   "observability": {
     "enabled": true
   }

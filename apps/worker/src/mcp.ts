@@ -7,7 +7,7 @@ import { type AgendaSnapshot, envelope, STATUS_RESOURCE, TOOLS } from "@cordoba/
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
-export const SERVER_INFO = { name: "agenda-cordoba", version: "0.1.0" } as const;
+export const SERVER_INFO = { name: "cordoba-mcp", version: "0.1.0" } as const;
 export const PROTOCOL_VERSION = "2025-06-18";
 const SUPPORTED_PROTOCOLS = new Set([PROTOCOL_VERSION, "2025-03-26", "2024-11-05"]);
 

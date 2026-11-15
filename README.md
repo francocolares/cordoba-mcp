@@ -92,7 +92,7 @@ Para probar ese camino: `AGENDA_SHEET_ID=<id-falso> node apps/scraper/dist/index
 ```json
 {
   "mcpServers": {
-    "agenda-cordoba": {
+    "cordoba-mcp": {
       "command": "node",
       "args": ["apps/mcp/dist/index.js"],
       "env": { "AGENDA_DATA_PATH": "data/events.jsonl" }
@@ -129,7 +129,12 @@ npx @modelcontextprotocol/inspector node apps/mcp/dist/index.js
 
 ## Deploy en Cloudflare
 
-Un único Worker (`cordoba-agenda`) sirve todo:
+Un único Worker (`cordoba-agenda`) sirve todo en **<https://cordobamcp.com>**, más la URL de
+`*.workers.dev`, que queda activa porque la Action la usa para el smoke test inmediato (no espera
+la propagación del dominio). El Custom Domain (`routes` en `wrangler.jsonc`) crea el registro DNS y
+emite el certificado solo, pero la zona tiene que estar en la **misma cuenta de Cloudflare** que el
+Worker.
+
 
 | Ruta                | Qué devuelve                                                    |
 | ------------------- | --------------------------------------------------------------- |
@@ -194,7 +199,7 @@ Si la cuenta destino todavía no existe, se crea desde el dashboard de Cloudflar
 Para conectarlo como MCP remoto:
 
 ```bash
-claude mcp add --transport http agenda-cordoba https://<tu-worker>.workers.dev/mcp
+claude mcp add --transport http cordoba-mcp https://cordobamcp.com/mcp
 ```
 
 ## Automatización
@@ -209,12 +214,29 @@ Se dispara con un push a `main`, a mano, o llamado por el scraper cuando dejó d
 push hechos con `GITHUB_TOKEN` no disparan workflows, así que el scrape invoca el deploy como
 workflow reutilizable).
 
-Secrets necesarios en el repo:
+Las credenciales viven en el **environment `prod`** del repo
+(Settings → Environments → `prod` → _Environment secrets_), no como secrets del repositorio: el
+job `deploy` declara `environment: prod` y es el único que las ve.
 
 | Secret                  | Para qué                                                                         |
 | ----------------------- | -------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`  | token con permiso **Workers Scripts: Edit** (y Workers KV si lo agregás después) |
 | `CLOUDFLARE_ACCOUNT_ID` | el account id de tu cuenta de Cloudflare                                         |
+
+Con dominio propio el token necesita además, **acotado a la zona `cordobamcp.com`**:
+`Zone → Workers Routes: Edit` y `Zone → Zone: Read`. La plantilla _Edit Cloudflare Workers_ ya los
+trae; un custom token mínimo, no, y el deploy falla al crear la ruta.
+
+Y una **variable** (no secret) opcional, `PROD_URL`: si está, el deploy verifica además el dominio
+propio con reintentos. Dejala sin definir hasta que el Custom Domain responda, así el primer deploy
+no queda en rojo esperando el certificado.
+
+```
+PROD_URL = https://cordobamcp.com
+```
+
+Si además le ponés _required reviewers_ al environment, cada deploy queda esperando aprobación
+manual — incluido el que dispara el scraper cuando baja datos nuevos.
 
 ## Notas
 

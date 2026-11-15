@@ -77,7 +77,7 @@ describe("JSON-RPC del MCP", () => {
       result: {
         protocolVersion: "2025-03-26",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "agenda-cordoba" },
+        serverInfo: { name: "cordoba-mcp" },
       },
     });
   });

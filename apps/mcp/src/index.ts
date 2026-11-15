@@ -15,7 +15,7 @@ const dataset = new DatasetCache({
   path: process.env["AGENDA_DATA_PATH"],
 });
 
-export const server = new McpServer({ name: "agenda-cordoba", version: "0.1.0" });
+export const server = new McpServer({ name: "cordoba-mcp", version: "0.1.0" });
 
 for (const tool of TOOLS) {
   server.registerTool(

@@ -87,4 +87,6 @@ jobs:
     needs: scrape
     if: needs.scrape.outputs.changed == 'true'
     uses: ./.github/workflows/deploy.yml
+    # Las credenciales de Cloudflare las toma el job llamado del environment
+    # `prod`; `inherit` queda sólo por si en el futuro se declara algún secret.
     secrets: inherit

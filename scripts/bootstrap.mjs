@@ -278,9 +278,10 @@ if (flags.skipGithub || !(await exists(join(repoRoot, ".git")))) {
 } else if (!hasGh) {
   console.log(
     [
-      "  Configurá a mano (Settings → Secrets and variables → Actions):",
+      "  Configurá a mano (Settings → Environments → prod → Environment secrets):",
       "    CLOUDFLARE_API_TOKEN   token con permiso Workers Scripts:Edit",
       "    CLOUDFLARE_ACCOUNT_ID  el account id de tu cuenta de Cloudflare",
+      "  Van en el environment `prod` (Settings → Environments), no en los secrets del repo.",
       "  Y creá la label `scraper-alert` para las alertas del validador.",
     ].join("\n"),
   );
@@ -289,14 +290,26 @@ if (flags.skipGithub || !(await exists(join(repoRoot, ".git")))) {
   if (!authed) {
     note("`gh` no está autenticado: corré `gh auth login` y reejecutá.");
   } else if (await confirm("Configuro los secrets y la label en el repo remoto?")) {
+    // El job `deploy` declara `environment: prod`, así que los secrets van ahí
+    // y no a nivel repo. `gh secret set --env` requiere que ya exista.
+    const repo = (
+      await run("gh", ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], {
+        capture: true,
+        quiet: true,
+      })
+    ).stdout.trim();
+    if (repo) {
+      await run("gh", ["api", "-X", "PUT", `repos/${repo}/environments/prod`, "--silent"]);
+      ok("environment `prod` listo");
+    }
     for (const name of ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"]) {
       const value = process.env[name] ?? (await ask(`Valor de ${name} (enter para saltear)`));
       if (!value) {
-        note(`${name} sin valor: configuralo después con \`gh secret set ${name}\`.`);
+        note(`${name} sin valor: configuralo después con \`gh secret set ${name} --env prod\`.`);
         continue;
       }
-      const { code } = await run("gh", ["secret", "set", name, "--body", value]);
-      if (code === 0) ok(`${name} configurado`);
+      const { code } = await run("gh", ["secret", "set", name, "--env", "prod", "--body", value]);
+      if (code === 0) ok(`${name} configurado en el environment prod`);
     }
     await run("gh", [
       "label",
@@ -319,7 +332,12 @@ console.log(`\n${bold("Listo.")}`);
 if (deploymentUrl) {
   console.log(`  Web:         ${deploymentUrl}`);
   console.log(`  MCP remoto:  ${deploymentUrl}/mcp`);
-  console.log(`  Conectarlo:  claude mcp add --transport http agenda-cordoba ${deploymentUrl}/mcp`);
+  console.log(
+    "  Conectarlo:  claude mcp add --transport http cordoba-mcp https://cordobamcp.com/mcp",
+  );
+  console.log(
+    `  (o, sin dominio: claude mcp add --transport http cordoba-mcp ${deploymentUrl}/mcp)`,
+  );
 }
 console.log("  MCP local:   ya configurado en .mcp.json (requiere `pnpm build`)");
 console.log("  Scrapeo:     node apps/scraper/dist/index.js run");

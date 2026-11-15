@@ -13,12 +13,10 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
+  # Sin `secrets:` declarados a propósito: las credenciales de Cloudflare viven
+  # en el environment `prod`, que el job resuelve por su cuenta (declarar un
+  # secret como required acá obligaría a tenerlo también a nivel repo).
   workflow_call:
-    secrets:
-      CLOUDFLARE_API_TOKEN:
-        required: true
-      CLOUDFLARE_ACCOUNT_ID:
-        required: true
 
 permissions:
   contents: read
@@ -30,6 +28,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID salen de este environment.
+    environment: prod
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -72,15 +72,40 @@ jobs:
           curl -fsS "$BASE/health" | tee /dev/stderr | grep -q '"ok": true'
           node apps/worker/smoke.mjs "$BASE/mcp"
 
+      # Chequeo del dominio propio. Opcional a propósito: en el primer deploy el
+      # Custom Domain tarda unos minutos en emitir el certificado, y no queremos
+      # un run rojo por eso. Activalo poniendo la variable de repo
+      # PROD_URL=https://cordobamcp.com cuando el dominio ya responda.
+      - name: Verificar el dominio de producción
+        if: vars.PROD_URL != ''
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          set -euo pipefail
+          echo "Verificando $PROD_URL"
+          for i in $(seq 1 12); do
+            if curl -fsS "$PROD_URL/health" | grep -q '"ok": true'; then
+              echo "OK en el intento $i"
+              node apps/worker/smoke.mjs "$PROD_URL/mcp"
+              exit 0
+            fi
+            echo "intento $i sin respuesta; reintento en 10s"
+            sleep 10
+          done
+          echo "::error::$PROD_URL no respondió tras 2 minutos"
+          exit 1
+
       - name: Resumen
         if: always()
         env:
           URL: ${{ steps.deploy.outputs.deployment-url }}
+          PROD_URL: ${{ vars.PROD_URL }}
         run: |
           {
             echo "### Deploy a Cloudflare"
             echo
-            echo "- URL: ${URL:-(no informada)}"
-            echo "- MCP: ${URL:-}/mcp"
+            echo "- workers.dev: ${URL:-(no informada)}"
+            echo "- Producción: ${PROD_URL:-(dominio no configurado)}"
+            echo "- MCP: ${PROD_URL:+$PROD_URL/mcp}${PROD_URL:-${URL:-}/mcp}"
             echo "- Eventos: $(wc -l < data/events.jsonl)"
           } >> "$GITHUB_STEP_SUMMARY"
