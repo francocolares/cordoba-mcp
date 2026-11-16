@@ -69,9 +69,10 @@ const conteos: Record<string, string> = {
   "Agenda de eventos": `${activos.length} eventos`,
   "Farmacias de turno": `${farmaciasActivas.length} farmacias`,
 };
-const fuentesConDatos = fuentes.map((f) =>
-  f.lista && conteos[f.nombre] ? { ...f, nota: conteos[f.nombre]! } : f,
-);
+/** Las que ya contestan van primero; entre iguales se respeta el orden del archivo. */
+const fuentesConDatos = fuentes
+  .map((f) => (f.lista && conteos[f.nombre] ? { ...f, nota: conteos[f.nombre]! } : f))
+  .sort((a, b) => Number(b.lista) - Number(a.lista));
 ---
 
 <Layout
@@ -103,7 +104,7 @@ const fuentesConDatos = fuentes.map((f) =>
     <Section
       id="fuentes"
       titulo="De dónde salen las respuestas"
-      lede="Una sola está activa. El resto van a ir apareciendo de a una, cuando los datos sean lo bastante confiables como para contestar con ellos."
+      lede="Arriba van las que ya contestan. El resto van a ir apareciendo de a una, cuando los datos sean lo bastante confiables como para contestar con ellos."
     >
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {fuentesConDatos.map((fuente) => <SourceCard fuente={fuente} />)}
