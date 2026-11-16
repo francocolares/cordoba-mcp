@@ -90,29 +90,6 @@ export const conversaciones: Conversacion[] = [
     },
   },
   {
-    id: "cerca",
-    etiqueta: "Cerca de",
-    proximamente: true,
-    caso: "Cada lugar con sus coordenadas (Mapa Cultural del SInCA y geocodificación de Georef) para poder ordenar por cercanía.",
-    chat: {
-      pregunta: "Estoy por el Buen Pastor. ¿Hay algo a diez cuadras para esta noche?",
-      intro: "Caminando desde ahí tenés dos:",
-      items: [
-        {
-          titulo: "Ciclo de jazz en el Centro Cultural Córdoba",
-          meta: "22:00 · Av. Poeta Lugones 401",
-          etiqueta: "a 8 cuadras",
-        },
-        {
-          titulo: "Muestra abierta en el Museo Caraffa",
-          meta: "Hasta las 22:00 · Av. Hipólito Yrigoyen 651",
-          etiqueta: "gratis",
-        },
-      ],
-      cierre: "Las dos quedan sobre el mismo recorrido, así que podés hacer las dos.",
-    },
-  },
-  {
     id: "feriados",
     etiqueta: "Findes largos",
     proximamente: true,
@@ -156,29 +133,6 @@ export const conversaciones: Conversacion[] = [
         },
       ],
       cierre: "Desde el centro conviene la 60. ¿Querés el recorrido completo?",
-    },
-  },
-  {
-    id: "clima",
-    etiqueta: "Clima",
-    proximamente: true,
-    caso: "El pronóstico por coordenada, para avisar cuándo el plan al aire libre no se sostiene.",
-    chat: {
-      pregunta: "¿Va a llover el domingo a la tarde?",
-      intro: "El domingo arranca despejado y se complica sobre la noche:",
-      items: [
-        {
-          titulo: "Domingo",
-          meta: "Máxima de 31°, mínima de 18° · viento del norte",
-          etiqueta: null,
-        },
-        {
-          titulo: "Tormentas aisladas desde las 19",
-          meta: "Alerta amarilla vigente para la ciudad y el norte del valle",
-          etiqueta: "alerta",
-        },
-      ],
-      cierre: "Si el plan es afuera, mejor antes de las seis de la tarde.",
     },
   },
   {

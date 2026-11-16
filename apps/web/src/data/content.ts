@@ -138,12 +138,4 @@ export const fuentes: Fuente[] = [
     lista: false,
     nota: "sin fuente estable",
   },
-  {
-    nombre: "Clima y alertas",
-    organismo: "Pronóstico por coordenada",
-    enlace: null,
-    responde: "Si el plan al aire libre se sostiene o conviene el plan B.",
-    lista: false,
-    nota: "fuente verificada",
-  },
 ];
