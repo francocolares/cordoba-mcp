@@ -1,0 +1,311 @@
+---
+import type { Conversacion } from "../data/conversaciones";
+import BrandIcon from "./BrandIcon.astro";
+import ChatPanel from "./ChatPanel.astro";
+import WrenchIcon from "./WrenchIcon.astro";
+
+interface Props {
+  conversaciones: Conversacion[];
+}
+
+const { conversaciones } = Astro.props;
+
+/** El encabezado del chat es uno solo: el JS necesita saber qué id está en obra. */
+const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
+---
+
+<section id="demo" class="border-t border-line py-20 sm:py-28">
+  <div class="shell">
+    <h2 class="mx-auto max-w-[24ch] text-center text-3xl sm:text-4xl lg:text-5xl">
+      Conversá con Córdoba, como lo harías con un amigo
+    </h2>
+
+    <!--
+      La pista y el gadget comparten celda de grilla: la pista da el alto por
+      el que dura el scroll, el gadget queda pegajoso y centrado encima.
+    -->
+    <div class="mt-12 grid grid-cols-[minmax(0,1fr)] sm:mt-16">
+      <div class="col-start-1 row-start-1" aria-hidden="true">
+        {
+          conversaciones.map((c) => (
+            <div class="h-[44vh] lg:h-[52vh]" data-etapa={c.id} />
+          ))
+        }
+      </div>
+
+      <div class="col-start-1 row-start-1 z-10 min-w-0">
+        <div class="sticky top-20 mx-auto w-full max-w-xl lg:top-28">
+          <div
+            class="pestanas -mx-5 overflow-x-auto px-5 pb-4 sm:mx-0 sm:px-0"
+            data-pestanas
+          >
+            <!-- w-max + min-w-full: centrado cuando entra, pegado al inicio cuando desborda. -->
+            <div class="flex w-max min-w-full justify-center gap-2" role="tablist">
+              {
+                conversaciones.map((c, i) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    class:list={[
+                      "pestana inline-flex shrink-0 items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm transition-colors",
+                      c.proximamente
+                        ? "pestana-obra border-line-strong text-muted"
+                        : "pestana-live",
+                    ]}
+                    data-pestana={c.id}
+                    aria-selected={i === 0 ? "true" : "false"}
+                  >
+                    {c.proximamente ? (
+                      <WrenchIcon class="size-3.5 opacity-70" />
+                    ) : (
+                      <span class="pulso-live size-2 rounded-full bg-current" />
+                    )}
+                    {c.etiqueta}
+                    <span class="sr-only">
+                      {c.proximamente ? " — en construcción" : " — funcionando"}
+                    </span>
+                  </button>
+                ))
+              }
+            </div>
+          </div>
+
+          <div
+            class="chat overflow-hidden rounded-card border border-claude-line bg-claude-bg text-claude-text shadow-2xl shadow-black/50"
+            data-chat
+          >
+            <div class="flex items-center gap-2 border-b border-claude-line px-4 py-3">
+              <BrandIcon name="claude-icon" class="size-4 text-claude-accent" />
+              <span class="text-sm text-claude-muted">Claude</span>
+
+              <span
+                class="ml-auto inline-flex items-center gap-1.5 rounded-full border border-dashed border-claude-muted/50 px-2.5 py-0.5 text-[0.6875rem] font-medium text-claude-muted"
+                data-construccion
+                data-en-obra={enObra.join(" ")}
+                hidden
+              >
+                <WrenchIcon class="size-3" />
+                En construcción
+              </span>
+
+              <span
+                class="ml-auto inline-flex items-center gap-1.5 rounded-full border border-live/40 bg-live/10 px-2.5 py-0.5 text-[0.6875rem] font-medium text-live-soft"
+                data-andando
+              >
+                <span class="pulso-live size-1.5 rounded-full bg-live"></span>
+                Funcionando
+              </span>
+            </div>
+
+            <div class="grid">
+              {conversaciones.map((c, i) => <ChatPanel conversacion={c} activa={i === 0} />)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  import {
+    elegirEventos,
+    formatearEvento,
+    type ItemChat,
+    parsearJsonl,
+  } from "../lib/demoEventos";
+  import { type CalendarioCrudo, elegirGuardia, parsearFarmacias } from "../lib/demoFarmacias";
+
+  const chat = document.querySelector<HTMLElement>("[data-chat]");
+  const etapas = [...document.querySelectorAll<HTMLElement>("[data-etapa]")];
+  const barra = document.querySelector<HTMLElement>("[data-pestanas]");
+  const pestanas = new Map(
+    [...document.querySelectorAll<HTMLElement>("[data-pestana]")].map((b) => [b.dataset.pestana, b]),
+  );
+  const paneles = new Map(
+    [...document.querySelectorAll<HTMLElement>("[data-panel]")].map((p) => [p.dataset.panel, p]),
+  );
+
+  const chipObra = document.querySelector<HTMLElement>("[data-construccion]");
+  const chipAndando = document.querySelector<HTMLElement>("[data-andando]");
+  const enObra = new Set((chipObra?.dataset.enObra ?? "").split(" ").filter(Boolean));
+
+  let visible: string | null = null;
+
+  function mostrar(id: string) {
+    if (id === visible) return;
+    visible = id;
+
+    const obra = enObra.has(id);
+    if (chipObra) chipObra.hidden = !obra;
+    if (chipAndando) chipAndando.hidden = obra;
+
+    for (const [clave, panel] of paneles) {
+      const activa = clave === id;
+      panel.classList.toggle("listo", activa);
+      panel.classList.toggle("opacity-0", !activa);
+      panel.classList.toggle("pointer-events-none", !activa);
+      if (activa) panel.removeAttribute("aria-hidden");
+      else panel.setAttribute("aria-hidden", "true");
+    }
+
+    for (const [clave, boton] of pestanas) {
+      boton.setAttribute("aria-selected", clave === id ? "true" : "false");
+    }
+
+    /* En pantallas chicas la pestaña activa se trae al centro de su carril. */
+    const activa = pestanas.get(id);
+    if (barra && activa && barra.scrollWidth > barra.clientWidth) {
+      barra.scrollTo({
+        left: activa.offsetLeft - (barra.clientWidth - activa.offsetWidth) / 2,
+        behavior: "smooth",
+      });
+    }
+  }
+
+  if (chat && etapas.length) {
+    /*
+     * La franja que decide qué etapa manda: al 55% del alto en escritorio y
+     * más abajo en celulares, donde el gadget ocupa la parte de arriba.
+     */
+    const angosta = window.matchMedia("(max-width: 1023px)");
+    const franja = () => (angosta.matches ? "-85% 0px -14% 0px" : "-55% 0px -44% 0px");
+
+    const cruzando = new Set<string>();
+    let observador: IntersectionObserver | null = null;
+
+    const alCruzar: IntersectionObserverCallback = (entradas) => {
+      for (const entrada of entradas) {
+        const id = (entrada.target as HTMLElement).dataset.etapa;
+        if (!id) continue;
+        if (entrada.isIntersecting) cruzando.add(id);
+        else cruzando.delete(id);
+      }
+
+      /* El gadget se enciende sólo mientras hay una etapa en la franja. */
+      chat.classList.toggle("activo", cruzando.size > 0);
+
+      const primera = etapas.find((e) => e.dataset.etapa && cruzando.has(e.dataset.etapa));
+      if (primera?.dataset.etapa) mostrar(primera.dataset.etapa);
+    };
+
+    const montar = () => {
+      observador?.disconnect();
+      cruzando.clear();
+      observador = new IntersectionObserver(alCruzar, { rootMargin: franja(), threshold: 0 });
+      for (const etapa of etapas) observador.observe(etapa);
+    };
+
+    montar();
+    angosta.addEventListener("change", montar);
+
+    /* Las pestañas también navegan: llevan el scroll a su etapa. */
+    for (const [id, boton] of pestanas) {
+      boton.addEventListener("click", () => {
+        const etapa = etapas.find((e) => e.dataset.etapa === id);
+        if (!etapa) return;
+        const caja = etapa.getBoundingClientRect();
+        const proporcion = angosta.matches ? 0.85 : 0.55;
+        window.scrollTo({
+          top: Math.round(window.scrollY + caja.top + caja.height / 2 - innerHeight * proporcion),
+          behavior: "smooth",
+        });
+      });
+    }
+  }
+
+  /* Primero el worker local y después el de producción (la landing también se
+     abre desde un build estático suelto). Si ninguno contesta, queda lo del build. */
+  async function bajar(ruta: string, accept: string): Promise<string | null> {
+    for (const base of ["", "https://cordobamcp.com"]) {
+      try {
+        const r = await fetch(`${base}${ruta}`, { headers: { accept } });
+        if (!r.ok) continue;
+        return await r.text();
+      } catch {
+        // Probamos la siguiente.
+      }
+    }
+    return null;
+  }
+
+  /* Datos frescos: lo del build sirve de piso, esto lo pisa si el worker contesta. */
+  async function refrescarAgenda() {
+    const lista = document.querySelector<HTMLElement>('[data-items="agenda"]');
+    if (!lista) return;
+
+    const texto = await bajar("/api/events.jsonl", "application/x-ndjson");
+    if (!texto) return;
+
+    const items = elegirEventos(parsearJsonl(texto)).map(formatearEvento);
+    if (!items.length) return;
+
+    const base = Number(lista.dataset.pasoBase ?? "3");
+    lista.replaceChildren(...items.map((item, i) => nodoItem(item, base + i)));
+  }
+
+  function nodoItem(item: ItemChat, paso: number): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "paso rounded-xl border border-claude-line bg-claude-surface/50 p-3";
+    li.style.setProperty("--paso", String(paso));
+
+    const cabeza = document.createElement("p");
+    cabeza.className = "flex items-baseline justify-between gap-3 font-medium";
+
+    const titulo = document.createElement("span");
+    titulo.className = "min-w-0";
+    titulo.textContent = item.titulo;
+    cabeza.append(titulo);
+
+    if (item.etiqueta) {
+      const etiqueta = document.createElement("span");
+      etiqueta.className = "shrink-0 font-mono text-[0.625rem] text-claude-accent";
+      etiqueta.textContent = item.etiqueta;
+      cabeza.append(etiqueta);
+    }
+
+    const meta = document.createElement("p");
+    meta.className = "mt-1 text-[0.8125rem] text-claude-muted";
+    meta.textContent = item.meta;
+
+    li.append(cabeza, meta);
+    return li;
+  }
+
+  /*
+   * La guardia depende del día, así que el HTML del build envejece de un día
+   * para el otro: la resolvemos en el navegador con el turnero y las farmacias
+   * que sirve el worker. Si no hay turnero para hoy, dejamos lo que haya.
+   */
+  async function refrescarFarmacias() {
+    const lista = document.querySelector<HTMLElement>('[data-items="farmacias"]');
+    if (!lista) return;
+
+    const [crudas, turnos] = await Promise.all([
+      bajar("/api/farmacias.jsonl", "application/x-ndjson"),
+      bajar("/api/farmacias/turnos.json", "application/json"),
+    ]);
+    if (!crudas || !turnos) return;
+
+    let calendarios: CalendarioCrudo[] = [];
+    try {
+      calendarios = (JSON.parse(turnos) as { calendars: CalendarioCrudo[] }).calendars ?? [];
+    } catch {
+      return;
+    }
+
+    const guardia = elegirGuardia(parsearFarmacias(crudas), calendarios);
+    if (guardia.items.length === 0) return;
+
+    const intro = document.querySelector<HTMLElement>('[data-intro="farmacias"]');
+    if (intro && guardia.turno !== null) {
+      intro.textContent = `Hoy está de guardia el turno ${guardia.turno}. Dos que te quedan cerca del Centro:`;
+    }
+
+    const base = Number(lista.dataset.pasoBase ?? "3");
+    lista.replaceChildren(...guardia.items.map((item, i) => nodoItem(item, base + i)));
+  }
+
+  refrescarAgenda();
+  refrescarFarmacias();
+</script>

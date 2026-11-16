@@ -1,0 +1,41 @@
+---
+interface Props {
+  endpoint: string;
+}
+
+const { endpoint } = Astro.props;
+---
+
+<div class="flex max-w-xl items-stretch overflow-hidden rounded-card border border-line-strong bg-surface">
+  <code
+    id="endpoint"
+    class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-4 py-3.5 font-mono text-sm text-ink"
+    >{endpoint}</code
+  >
+  <button
+    type="button"
+    data-copiar="endpoint"
+    class="flex-none cursor-pointer border-l border-line-strong bg-accent px-5 text-sm font-medium text-jet transition-colors hover:bg-accent-soft"
+  >
+    Copiar
+  </button>
+</div>
+
+<script>
+  for (const boton of document.querySelectorAll<HTMLButtonElement>("[data-copiar]")) {
+    boton.addEventListener("click", async () => {
+      const fuente = document.getElementById(boton.dataset.copiar ?? "");
+      if (!fuente) return;
+      const original = boton.textContent;
+      try {
+        await navigator.clipboard.writeText(fuente.textContent?.trim() ?? "");
+        boton.textContent = "Copiado";
+      } catch {
+        boton.textContent = "Copiá a mano";
+      }
+      window.setTimeout(() => {
+        boton.textContent = original;
+      }, 1800);
+    });
+  }
+</script>

@@ -1,52 +1,115 @@
 ---
-import { AGENDA_URL, loadDataset, SOURCE_NAME, searchEvents, toSummary } from "@cordoba/core";
+import { loadDataset, loadFarmaciasDataset, TZ } from "@cordoba/core";
+import ChatShowcase from "../components/ChatShowcase.astro";
+import ClientCard from "../components/ClientCard.astro";
+import EndpointField from "../components/EndpointField.astro";
+import Hero from "../components/Hero.astro";
+import Section from "../components/Section.astro";
+import SiteFooter from "../components/SiteFooter.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import SourceCard from "../components/SourceCard.astro";
+import { clientes, ENDPOINT, fuentes, REPO } from "../data/content";
+import { conversaciones } from "../data/conversaciones";
+import Layout from "../layouts/Layout.astro";
+import { elegirEventos, formatearEvento, TZ_CBA } from "../lib/demoEventos";
+import { elegirGuardia } from "../lib/demoFarmacias";
 
 const dataset = await loadDataset({
   path: new URL("../../../../data/events.jsonl", import.meta.url).pathname,
 }).catch(() => ({ events: [], status: null, data_as_of: "", loaded_at: 0 }));
-const events = searchEvents(dataset.events, { limit: 60 }).map(toSummary);
-const fmt = new Intl.DateTimeFormat("es-AR", {
-  dateStyle: "full",
-  timeStyle: "short",
-  timeZone: "America/Argentina/Cordoba",
+
+const farmacias = await loadFarmaciasDataset({
+  path: new URL("../../../../data/events.jsonl", import.meta.url).pathname,
+}).catch(() => null);
+
+const activos = dataset.events.filter((e) => e.active);
+const farmaciasActivas = farmacias?.pharmacies.filter((p) => p.active) ?? [];
+const fechaLarga = new Intl.DateTimeFormat("es-AR", {
+  day: "numeric",
+  month: "long",
+  timeZone: TZ,
 });
+const actualizado = dataset.data_as_of ? new Date(dataset.data_as_of) : null;
+const actualizadoTexto = actualizado ? fechaLarga.format(actualizado) : "todavía sin datos";
+
+/** La demo formatea fechas sin importar core; que no se desincronice la zona. */
+if (TZ !== TZ_CBA) throw new Error(`Zona horaria desincronizada: ${TZ} vs ${TZ_CBA}`);
+
+/**
+ * La conversación de la agenda arranca con los datos del build. Una vez en el
+ * navegador, ChatShowcase la vuelve a pedir a /api/events.jsonl.
+ */
+const itemsAgenda = elegirEventos(activos).map(formatearEvento);
+
+/**
+ * La guardia de hoy, con los datos del build. Si no hay turnero para hoy
+ * (pasó el año y todavía no cargamos el nuevo), la pestaña vuelve a rotularse
+ * como ejemplo: preferimos no afirmar una guardia que no podemos sostener.
+ */
+const guardia = elegirGuardia(farmaciasActivas, farmacias?.calendars ?? []);
+
+const conversacionesConDatos = conversaciones.map((c) => {
+  if (c.id === "agenda") return { ...c, chat: { ...c.chat, items: itemsAgenda } };
+  if (c.id === "farmacias") {
+    if (guardia.items.length === 0) return { ...c, proximamente: true };
+    return {
+      ...c,
+      chat: {
+        ...c.chat,
+        intro: `Hoy está de guardia el turno ${guardia.turno}. Dos que te quedan cerca del Centro:`,
+        items: guardia.items,
+      },
+    };
+  }
+  return c;
+});
+
+/** El conteo real de las fuentes que ya contestan. */
+const conteos: Record<string, string> = {
+  "Agenda de eventos": `${activos.length} eventos`,
+  "Farmacias de turno": `${farmaciasActivas.length} farmacias`,
+};
+const fuentesConDatos = fuentes.map((f) =>
+  f.lista && conteos[f.nombre] ? { ...f, nota: conteos[f.nombre]! } : f,
+);
 ---
 
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width" />
-    <title>Agenda de Córdoba</title>
-    <style>
-      :root { color-scheme: light dark; }
-      body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 0 auto; padding: 2rem 1rem; line-height: 1.5; }
-      h1 { margin-bottom: 0.25rem; }
-      .meta { opacity: 0.7; font-size: 0.9rem; }
-      ul { list-style: none; padding: 0; }
-      li { border-top: 1px solid color-mix(in srgb, currentColor 20%, transparent); padding: 0.85rem 0; }
-      .when { font-variant-numeric: tabular-nums; font-size: 0.85rem; opacity: 0.75; }
-      .tag { font-size: 0.75rem; border: 1px solid currentColor; border-radius: 999px; padding: 0 0.5rem; opacity: 0.7; }
-      .free { font-weight: 600; }
-    </style>
-  </head>
-  <body>
-    <h1>Agenda de Córdoba</h1>
-    <p class="meta">
-      Datos de <a href={AGENDA_URL}>{SOURCE_NAME}</a>.
-      {dataset.data_as_of && <span>Actualizado: {dataset.data_as_of}</span>}
-      — {events.length} eventos próximos.
-    </p>
-    {events.length === 0 && <p>No hay datos todavía: corré <code>pnpm scrape</code>.</p>}
-    <ul>
-      {events.map((e) => (
-        <li>
-          <div class="when">{fmt.format(new Date(e.start))}</div>
-          <strong>{e.title}</strong>
-          {" "}<span class="tag">{e.category}</span>
-          {e.price_type === "gratis" && <span class="free"> · gratis</span>}
-          {e.venue && <div class="meta">{e.venue}</div>}
-        </li>
-      ))}
-    </ul>
-  </body>
-</html>
+<Layout
+  title="cordoba-mcp"
+  description="Conectá Claude o ChatGPT a los datos públicos de la ciudad de Córdoba y preguntales qué hacer, como le preguntarías a un amigo que vive acá."
+>
+  <SiteHeader />
+
+  <main>
+    <Hero clientes={clientes} />
+
+    <ChatShowcase conversaciones={conversacionesConDatos} />
+
+    <Section
+      id="conectar"
+      titulo="Conectalo en dos minutos"
+      lede="Copiás esta dirección, la pegás donde te la pida, y tu asistente empieza a saber de Córdoba."
+    >
+      <EndpointField endpoint={ENDPOINT} />
+
+      <div class="mt-12 grid gap-5 sm:grid-cols-2">
+        {clientes.map((cliente) => <ClientCard cliente={cliente} />)}
+      </div>
+      <p class="mt-8 max-w-[46ch] text-sm text-muted">
+        Si usás otra app que sepa conectarse a servidores externos, la dirección es siempre la misma.
+      </p>
+    </Section>
+
+    <Section
+      id="fuentes"
+      titulo="De dónde salen las respuestas"
+      lede="Una sola está activa. El resto van a ir apareciendo de a una, cuando los datos sean lo bastante confiables como para contestar con ellos."
+    >
+      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {fuentesConDatos.map((fuente) => <SourceCard fuente={fuente} />)}
+      </div>
+    </Section>
+  </main>
+
+  <SiteFooter repo={REPO} actualizadoTexto={actualizadoTexto} />
+</Layout>

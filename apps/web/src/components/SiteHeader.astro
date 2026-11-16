@@ -1,0 +1,21 @@
+---
+import { CONTACTO } from "../data/content";
+---
+
+<header class="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
+  <div class="shell flex h-14 items-center justify-between gap-4">
+    <a href="/" class="font-mono text-sm text-ink no-underline">cordoba-mcp</a>
+
+    <nav class="hidden items-center gap-7 text-sm text-muted sm:flex">
+      <a href="#conectar" class="no-underline hover:text-ink">Conectar</a>
+      <a href="#fuentes" class="no-underline hover:text-ink">Fuentes</a>
+    </nav>
+
+    <a
+      href={`mailto:${CONTACTO}`}
+      class="inline-flex items-center justify-center rounded-card border border-line-strong bg-surface px-3.5 py-1.5 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
+    >
+      Contacto
+    </a>
+  </div>
+</header>

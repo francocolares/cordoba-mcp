@@ -1,0 +1,34 @@
+---
+import icons from "@iconify-json/logos/icons.json";
+
+interface Props {
+  /** Clave dentro del set `logos` de Iconify. */
+  name: "claude-icon" | "openai-icon" | "discord-icon";
+  class?: string;
+}
+
+const { name, class: extra = "" } = Astro.props;
+
+type IconifyIcon = { body: string; width?: number; height?: number };
+
+const set = icons as { icons: Record<string, IconifyIcon>; width?: number; height?: number };
+const icon = set.icons[name];
+const width = icon.width ?? set.width ?? 24;
+const height = icon.height ?? set.height ?? 24;
+
+/**
+ * El set trae los colores de marca embebidos. Los pasamos a currentColor para
+ * que las marcas se lean monocromas sobre el fondo oscuro, sin dos naranjas
+ * compitiendo con el acento de la página.
+ */
+const body = icon.body.replace(/fill="#[0-9a-fA-F]{3,8}"/g, 'fill="currentColor"');
+---
+
+<svg
+  viewBox={`0 0 ${width} ${height}`}
+  fill="currentColor"
+  role="img"
+  aria-hidden="true"
+  class:list={["shrink-0", extra]}
+  set:html={body}
+/>

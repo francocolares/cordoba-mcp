@@ -10,11 +10,14 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "astro": "^5.14.0",
-    "@cordoba/core": "workspace:*"
+    "@cordoba/core": "workspace:*",
+    "astro": "^5.14.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
+    "@iconify-json/logos": "^1.2.20",
+    "@tailwindcss/vite": "^4.3.5",
+    "tailwindcss": "^4.3.5",
     "typescript": "^5.9.0"
   }
 }

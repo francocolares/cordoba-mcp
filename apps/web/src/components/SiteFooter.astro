@@ -1,0 +1,26 @@
+---
+interface Props {
+  repo: string;
+  actualizadoTexto: string;
+}
+
+const { repo, actualizadoTexto } = Astro.props;
+---
+
+<footer class="border-t border-line py-16">
+  <div class="shell">
+    <div class="max-w-3xl space-y-5">
+      <p class="text-sm text-muted">
+        Todo lo que se responde acá sale de datos públicos, y cada fuente dice de quién son: el
+        mérito es del organismo que los publica. Este proyecto los ordena, los corrige cuando vienen
+        sucios y los vuelve a publicar, sin cambiarles el contenido. Si algo está mal en el origen,
+        va a estar mal acá.
+      </p>
+      <p class="text-sm text-muted">
+        Hecho en Córdoba, con el código a la vista en <a href={repo}>GitHub</a>. Los horarios son
+        los de acá, todo el año.
+      </p>
+      <p class="font-mono text-xs text-muted">Datos actualizados el {actualizadoTexto}</p>
+    </div>
+  </div>
+</footer>

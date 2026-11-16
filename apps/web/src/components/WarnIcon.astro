@@ -1,0 +1,24 @@
+---
+/** Triángulo de atención: avisa que la fuente todavía no está conectada. */
+interface Props {
+  class?: string;
+}
+
+const { class: extra = "" } = Astro.props;
+---
+
+<svg
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  role="img"
+  aria-hidden="true"
+  class:list={["shrink-0", extra]}
+>
+  <path d="m10.3 3.9-8.1 13.5a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path>
+  <path d="M12 9v4"></path>
+  <path d="M12 17h.01"></path>
+</svg>

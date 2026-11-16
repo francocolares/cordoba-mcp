@@ -1,0 +1,101 @@
+---
+import type { Conversacion } from "../data/conversaciones";
+import BrandIcon from "./BrandIcon.astro";
+import WarnIcon from "./WarnIcon.astro";
+
+interface Props {
+  conversacion: Conversacion;
+  activa: boolean;
+}
+
+const { conversacion, activa } = Astro.props;
+const { chat } = conversacion;
+
+/** Orden de aparición de cada parte de la respuesta. */
+const PASO_PREGUNTA = 0;
+const PASO_HERRAMIENTA = 1;
+const PASO_INTRO = 2;
+const PASO_ITEMS = 3;
+const pasoCierre = PASO_ITEMS + Math.max(chat.items.length, 2);
+---
+
+<div
+  class:list={[
+    "panel col-start-1 row-start-1 px-4 py-5 transition-opacity duration-300 sm:px-5",
+    activa ? "listo" : "pointer-events-none opacity-0",
+  ]}
+  data-panel={conversacion.id}
+  aria-hidden={activa ? undefined : "true"}
+>
+  {
+    conversacion.proximamente && (
+      <p class="mb-5 flex items-center gap-2.5 rounded-xl border border-warn/35 bg-warn/10 px-3.5 py-2.5 text-[0.8125rem] font-medium text-warn-soft">
+        <WarnIcon class="size-4 text-warn" />
+        Estamos conectando esta fuente de datos
+      </p>
+    )
+  }
+
+  <p
+    class="paso ml-auto w-fit max-w-[85%] rounded-2xl rounded-br-md bg-claude-surface px-3.5 py-2.5 text-[0.9375rem]"
+    style={`--paso:${PASO_PREGUNTA}`}
+  >
+    {chat.pregunta}
+  </p>
+
+  <div class="mt-4 flex gap-3">
+    <span class="paso mt-1 block text-claude-accent" style={`--paso:${PASO_HERRAMIENTA}`}>
+      <BrandIcon name="claude-icon" class="size-5" />
+    </span>
+
+    <div class="min-w-0 flex-1 text-[0.9375rem]">
+      <p
+        class="paso flex w-fit items-center gap-2 rounded-lg border border-claude-line bg-claude-surface/60 px-2.5 py-1 font-mono text-[0.6875rem] text-claude-muted"
+        style={`--paso:${PASO_HERRAMIENTA}`}
+      >
+        <span
+          class:list={[
+            "size-1.5 rounded-full",
+            conversacion.proximamente ? "bg-claude-muted/60" : "pulso-live bg-live",
+          ]}
+        />
+        cordoba-mcp
+      </p>
+
+      <p
+        class="paso mt-3 text-claude-muted"
+        style={`--paso:${PASO_INTRO}`}
+        data-intro={conversacion.id}
+      >
+        {chat.intro}
+      </p>
+
+      <ul
+        class="m-0 mt-3 list-none space-y-2 p-0"
+        data-items={conversacion.id}
+        data-paso-base={PASO_ITEMS}
+      >
+        {
+          chat.items.map((item, i) => (
+            <li
+              class="paso rounded-xl border border-claude-line bg-claude-surface/50 p-3"
+              style={`--paso:${PASO_ITEMS + i}`}
+            >
+              <p class="flex items-baseline justify-between gap-3 font-medium">
+                <span class="min-w-0">{item.titulo}</span>
+                {item.etiqueta && (
+                  <span class="shrink-0 font-mono text-[0.625rem] text-claude-accent">
+                    {item.etiqueta}
+                  </span>
+                )}
+              </p>
+              <p class="mt-1 text-[0.8125rem] text-claude-muted">{item.meta}</p>
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="paso mt-3 text-claude-muted" style={`--paso:${pasoCierre}`}>{chat.cierre}</p>
+    </div>
+  </div>
+</div>
