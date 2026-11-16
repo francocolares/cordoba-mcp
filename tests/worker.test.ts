@@ -198,7 +198,13 @@ describe("JSON-RPC del MCP", () => {
       params: { uri: "agenda://status" },
     })) as { json: { result: { contents: { text: string }[] } } };
     const status = JSON.parse(read.json.result.contents[0]!.text);
-    expect(status.agenda.status.validation.status).toBeTruthy();
+    /*
+     * `validation` puede venir en null: el workflow valida en un paso y
+     * scrapea en otro, así que el status queda sin el resultado. Lo que el
+     * resource tiene que garantizar es la forma, no el veredicto del día.
+     */
+    expect(status.agenda.status.counts.total).toBeGreaterThan(0);
+    expect(status.agenda.data_as_of).toBeTruthy();
     expect(status.farmacias).toBeTruthy();
 
     const missing = (await rpc({

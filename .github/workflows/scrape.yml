@@ -65,7 +65,10 @@ jobs:
               });
             }
 
-      - run: node apps/scraper/dist/index.js scrape
+      # `run` y no `scrape`: revalida y deja el veredicto dentro de status.json.
+      # `scrape` a secas lo escribe en null, porque la validación de arriba
+      # ocurrió en otro proceso.
+      - run: node apps/scraper/dist/index.js run
 
       - name: Commitear data/
         id: commit
