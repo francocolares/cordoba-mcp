@@ -48,21 +48,28 @@ const itemsAgenda = elegirEventos(activos).map(formatearEvento);
  */
 const guardia = elegirGuardia(farmaciasActivas, farmacias?.calendars ?? []);
 
-const conversacionesConDatos = conversaciones.map((c) => {
-  if (c.id === "agenda") return { ...c, chat: { ...c.chat, items: itemsAgenda } };
-  if (c.id === "farmacias") {
-    if (guardia.items.length === 0) return { ...c, proximamente: true };
-    return {
-      ...c,
-      chat: {
-        ...c.chat,
-        intro: `Hoy está de guardia el turno ${guardia.turno}. Dos que te quedan cerca del Centro:`,
-        items: guardia.items,
-      },
-    };
-  }
-  return c;
-});
+/**
+ * Las pestañas que ya contestan van primero y las que están en obra al final,
+ * igual que la grilla de fuentes. El orden se decide después de resolver la
+ * guardia, porque farmacias cae a "próximamente" si no hay turnero para hoy.
+ */
+const conversacionesConDatos = conversaciones
+  .map((c) => {
+    if (c.id === "agenda") return { ...c, chat: { ...c.chat, items: itemsAgenda } };
+    if (c.id === "farmacias") {
+      if (guardia.items.length === 0) return { ...c, proximamente: true };
+      return {
+        ...c,
+        chat: {
+          ...c.chat,
+          intro: `Hoy está de guardia el turno ${guardia.turno}. Dos que te quedan cerca del Centro:`,
+          items: guardia.items,
+        },
+      };
+    }
+    return c;
+  })
+  .sort((a, b) => Number(a.proximamente) - Number(b.proximamente));
 
 /** El conteo real de las fuentes que ya contestan. */
 const conteos: Record<string, string> = {
