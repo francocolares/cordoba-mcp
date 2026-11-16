@@ -71,15 +71,8 @@ const conversacionesConDatos = conversaciones
   })
   .sort((a, b) => Number(a.proximamente) - Number(b.proximamente));
 
-/** El conteo real de las fuentes que ya contestan. */
-const conteos: Record<string, string> = {
-  "Agenda de eventos": `${activos.length} eventos`,
-  "Farmacias de turno": `${farmaciasActivas.length} farmacias`,
-};
 /** Las que ya contestan van primero; entre iguales se respeta el orden del archivo. */
-const fuentesConDatos = fuentes
-  .map((f) => (f.lista && conteos[f.nombre] ? { ...f, nota: conteos[f.nombre]! } : f))
-  .sort((a, b) => Number(b.lista) - Number(a.lista));
+const fuentesConDatos = [...fuentes].sort((a, b) => Number(b.lista) - Number(a.lista));
 ---
 
 <Layout

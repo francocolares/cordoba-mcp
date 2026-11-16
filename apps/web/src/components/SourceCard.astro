@@ -11,7 +11,7 @@ const { fuente } = Astro.props;
 
 <article
   class:list={[
-    "flex flex-col gap-3 rounded-card border p-5",
+    "rounded-card border p-5",
     fuente.lista ? "border-accent/35 bg-surface" : "border-line bg-white/[0.015]",
   ]}
 >
@@ -24,12 +24,4 @@ const { fuente } = Astro.props;
     </div>
     <Badge tone={fuente.lista ? "accent" : "quiet"}>{fuente.lista ? "activa" : "pendiente"}</Badge>
   </div>
-
-  <p class="text-sm text-muted">{fuente.responde}</p>
-
-  {
-    fuente.nota && (
-      <p class="mt-auto border-t border-line pt-3 font-mono text-xs text-muted">{fuente.nota}</p>
-    )
-  }
 </article>
