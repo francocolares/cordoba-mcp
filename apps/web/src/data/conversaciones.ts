@@ -90,29 +90,6 @@ export const conversaciones: Conversacion[] = [
     },
   },
   {
-    id: "feriados",
-    etiqueta: "Findes largos",
-    proximamente: true,
-    caso: "El calendario de feriados nacionales, para saber qué fin de semana se estira y cruzarlo con la agenda.",
-    chat: {
-      pregunta: "¿Cuándo cae el próximo fin de semana largo?",
-      intro: "El que viene es en diciembre, y son cuatro días:",
-      items: [
-        {
-          titulo: "Del sábado 5 al martes 8 de diciembre",
-          meta: "Lunes 7 puente turístico · martes 8, Inmaculada Concepción",
-          etiqueta: "4 días",
-        },
-        {
-          titulo: "Después, Navidad",
-          meta: "Viernes 25 de diciembre, feriado inamovible",
-          etiqueta: null,
-        },
-      ],
-      cierre: "Para el finde largo ya hay fiestas anunciadas en el valle. ¿Te las busco?",
-    },
-  },
-  {
     id: "colectivos",
     etiqueta: "Colectivos",
     proximamente: true,

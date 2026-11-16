@@ -90,14 +90,6 @@ export const fuentes: Fuente[] = [
     nota: "fuente verificada",
   },
   {
-    nombre: "Feriados y findes largos",
-    organismo: "Calendario nacional",
-    enlace: null,
-    responde: "Qué fin de semana se estira, para saber cuándo hay más movimiento.",
-    lista: false,
-    nota: "fuente verificada",
-  },
-  {
     nombre: "Cine y cartelera",
     organismo: "Cineclub Municipal y salas de la ciudad",
     enlace: null,
