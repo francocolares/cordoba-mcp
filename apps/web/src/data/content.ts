@@ -74,6 +74,15 @@ export const fuentes: Fuente[] = [
     nota: "fuente verificada",
   },
   {
+    nombre: "Atracciones naturales",
+    organismo: "Agencia Córdoba Turismo y Secretaría de Ambiente",
+    enlace: null,
+    responde:
+      "Qué cascada, cerro o reserva te queda a mano para el día, cómo se llega y si hace falta permiso o guía.",
+    lista: false,
+    nota: "sin relevar",
+  },
+  {
     nombre: "Teatros y museos de la Provincia",
     organismo: "Agencia Córdoba Cultura",
     enlace: null,
@@ -121,6 +130,24 @@ export const fuentes: Fuente[] = [
     responde: "Dónde se hace cada cosa, qué papeles llevar y hasta qué hora atienden.",
     lista: false,
     nota: "buscando fuente",
+  },
+  {
+    nombre: "Boletín Oficial",
+    organismo: "Municipalidad de Córdoba",
+    enlace: null,
+    responde:
+      "Qué ordenanza, decreto o licitación se publicó, para poder contestar qué cambió y desde cuándo rige.",
+    lista: false,
+    nota: "sin relevar · se puede scrapear",
+  },
+  {
+    nombre: "Catastro y valores de suelo",
+    organismo: "IDECOR y Dirección de Catastro de la Provincia",
+    enlace: null,
+    responde:
+      "Qué parcela es cada lote, cómo está zonificado y cuánto vale el suelo en esa cuadra.",
+    lista: false,
+    nota: "sin relevar",
   },
   {
     nombre: "Ferias de barrio",
