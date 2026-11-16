@@ -137,12 +137,6 @@ export const fuentes: Fuente[] = [
     lista: false,
   },
   {
-    nombre: "Direcciones y coordenadas",
-    organismo: "Mapa Cultural (SInCA) y Georef",
-    enlace: null,
-    lista: false,
-  },
-  {
     nombre: "Ferias de barrio",
     organismo: "Centros vecinales",
     enlace: null,
