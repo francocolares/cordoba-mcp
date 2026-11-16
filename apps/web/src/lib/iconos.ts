@@ -22,6 +22,10 @@ export const ICONOS_FUENTE = [
   "stamp",
   "newspaper",
   "layers",
+  "trending-up",
+  "wheat",
+  "flame",
+  "satellite",
 ] as const;
 
 export type SourceIconName = (typeof ICONOS_FUENTE)[number];

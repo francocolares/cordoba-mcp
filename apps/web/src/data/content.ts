@@ -186,4 +186,32 @@ export const fuentes: Fuente[] = [
     enlace: null,
     lista: false,
   },
+  {
+    nombre: "Actividad económica y empleo",
+    icono: "trending-up",
+    organismo: "Dirección General de Estadística y Censos de la Provincia",
+    enlace: null,
+    lista: false,
+  },
+  {
+    nombre: "Producción agropecuaria",
+    icono: "wheat",
+    organismo: "Ministerio de Bioagroindustria y Bolsa de Cereales de Córdoba",
+    enlace: null,
+    lista: false,
+  },
+  {
+    nombre: "Incendios y áreas quemadas",
+    icono: "flame",
+    organismo: "Sentinel y SAOCOM, sobre el parte de la Provincia",
+    enlace: null,
+    lista: false,
+  },
+  {
+    nombre: "Observación de la Tierra",
+    icono: "satellite",
+    organismo: "Copernicus (ESA) y CONAE",
+    enlace: null,
+    lista: false,
+  },
 ];
