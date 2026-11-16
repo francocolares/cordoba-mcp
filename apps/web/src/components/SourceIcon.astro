@@ -1,0 +1,32 @@
+---
+import icons from "@iconify-json/lucide/icons.json";
+import type { SourceIconName } from "../lib/iconos";
+
+/**
+ * Ícono de fuente, tomado del set `lucide` de Iconify. El JSON se resuelve en
+ * el build (son 2135 trazos) y al HTML sólo va el `body` del que se usa, así
+ * que el cliente no baja el set.
+ */
+
+interface Props {
+  name: SourceIconName;
+  class?: string;
+}
+
+const { name, class: extra = "" } = Astro.props;
+
+const set = icons as { icons: Record<string, { body: string }> };
+const icon = set.icons[name];
+if (!icon) throw new Error(`No existe el ícono "${name}" en el set lucide`);
+
+/** Lucide viene con trazo 2; a este tamaño queda fino y más prolijo en 1.6. */
+const body = icon.body.replace(/stroke-width="2"/g, 'stroke-width="1.6"');
+---
+
+<svg
+  viewBox="0 0 24 24"
+  role="img"
+  aria-hidden="true"
+  class:list={["shrink-0", extra]}
+  set:html={body}
+/>

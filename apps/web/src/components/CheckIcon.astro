@@ -1,0 +1,22 @@
+---
+/** Tilde: reemplaza a la palabra "activa" en las fuentes que ya contestan. */
+interface Props {
+  class?: string;
+}
+
+const { class: extra = "" } = Astro.props;
+---
+
+<svg
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2.25"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  role="img"
+  aria-hidden="true"
+  class:list={["shrink-0", extra]}
+>
+  <path d="m5 13 4.2 4.2L19 7"></path>
+</svg>

@@ -1,27 +1,184 @@
 ---
 import type { Fuente } from "../data/content";
-import Badge from "./Badge.astro";
+import CheckIcon from "./CheckIcon.astro";
+import SourceIcon from "./SourceIcon.astro";
 
 interface Props {
   fuente: Fuente;
 }
 
 const { fuente } = Astro.props;
+const { lista } = fuente;
 ---
 
 <article
   class:list={[
-    "rounded-card border p-5",
-    fuente.lista ? "border-accent/35 bg-surface" : "border-line bg-white/[0.015]",
+    "fuente group relative isolate overflow-hidden rounded-card border p-5",
+    lista ? "activa border-live/30 bg-live/[0.045]" : "border-dashed border-line-strong/80",
   ]}
+  data-fuente
 >
-  <div class="flex items-start justify-between gap-3">
-    <div>
-      <h3 class={`text-lg ${fuente.lista ? "" : "text-dove"}`}>{fuente.nombre}</h3>
-      <p class="mt-1 text-sm text-muted">
-        {fuente.enlace ? <a href={fuente.enlace}>{fuente.organismo}</a> : fuente.organismo}
+  <!-- Mancha de color arriba a la derecha: le da volumen a la ficha. -->
+  <span
+    class:list={[
+      "pointer-events-none absolute -right-12 -top-16 -z-10 size-36 rounded-full blur-2xl transition-opacity duration-500",
+      lista ? "bg-live/20 opacity-80" : "bg-dove/10 opacity-0 group-hover:opacity-60",
+    ]}
+    aria-hidden="true"
+  ></span>
+
+  {
+    lista ? (
+      <span class="absolute right-4 top-4 grid size-[1.375rem] place-items-center rounded-full bg-live/15 text-live ring-1 ring-live/30">
+        <CheckIcon class="size-3" />
+        <span class="sr-only">fuente activa</span>
+      </span>
+    ) : (
+      <span class="absolute right-4 top-[1.0625rem] font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-fog/70">
+        pendiente
+      </span>
+    )
+  }
+
+  <div class="flex items-start gap-4 pr-16">
+    <span
+      class:list={[
+        "tile grid size-11 shrink-0 place-items-center rounded-2xl border",
+        lista
+          ? "border-live/25 bg-live/10 text-live shadow-[0_0_24px_-8px_rgba(63,212,127,0.6)]"
+          : "border-dashed border-line-strong bg-white/[0.02] text-fog group-hover:border-line-strong group-hover:text-dove",
+      ]}
+    >
+      <SourceIcon name={fuente.icono} class="size-5" />
+    </span>
+
+    <div class="min-w-0 flex-1">
+      <h3
+        class={`text-pretty text-[1.0625rem] leading-snug tracking-[-0.01em] ${lista ? "text-ink" : "text-dove/90"}`}
+      >
+        {fuente.nombre}
+      </h3>
+
+      <p class="mt-1.5 text-pretty text-[0.8125rem] leading-relaxed text-muted">
+        {
+          fuente.enlace ? (
+            <a
+              href={fuente.enlace}
+              class="decoration-line/0 underline-offset-[3px] transition-colors hover:text-dove hover:decoration-current"
+            >
+              {fuente.organismo}
+            </a>
+          ) : (
+            fuente.organismo
+          )
+        }
       </p>
     </div>
-    <Badge tone={fuente.lista ? "accent" : "quiet"}>{fuente.lista ? "activa" : "pendiente"}</Badge>
   </div>
 </article>
+
+<style>
+  .fuente {
+    --brillo: rgba(213, 217, 226, 0.34);
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.022), transparent 42%);
+    transition:
+      border-color 280ms ease,
+      transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .fuente.activa {
+    --brillo: rgba(63, 212, 127, 0.6);
+  }
+
+  .fuente:hover {
+    transform: translateY(-3px);
+  }
+
+  .fuente .tile {
+    transition:
+      transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 280ms ease,
+      color 280ms ease;
+  }
+
+  .fuente:hover .tile {
+    transform: scale(1.06) rotate(-2deg);
+  }
+
+  /*
+   * El brillo del borde sigue al cursor: un degradado radial recortado al
+   * marco con dos máscaras que se restan, así se ilumina sólo el contorno.
+   * Las coordenadas las escribe el script de abajo en --mx / --my.
+   */
+  .fuente::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: radial-gradient(
+      160px circle at var(--mx, 50%) var(--my, 0%),
+      var(--brillo),
+      transparent 70%
+    );
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    opacity: 0;
+    transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+
+  /* Y un halo tenue por dentro, para que el contorno no brille solo. */
+  .fuente::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(
+      260px circle at var(--mx, 50%) var(--my, 0%),
+      color-mix(in oklab, var(--brillo) 12%, transparent),
+      transparent 68%
+    );
+    opacity: 0;
+    transition: opacity 300ms ease;
+    pointer-events: none;
+  }
+
+  .fuente:hover::after,
+  .fuente:hover::before,
+  .fuente:focus-within::after {
+    opacity: 1;
+  }
+
+  @media (hover: none) {
+    .fuente:hover {
+      transform: none;
+    }
+
+    .fuente:hover .tile {
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  /*
+   * `pointermove` escribe la posición relativa del cursor en variables CSS y
+   * el resto lo hace el degradado. Astro sube este script una sola vez por
+   * página, no una por tarjeta.
+   */
+  for (const card of document.querySelectorAll<HTMLElement>("[data-fuente]")) {
+    card.addEventListener("pointermove", (e) => {
+      const caja = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${e.clientX - caja.left}px`);
+      card.style.setProperty("--my", `${e.clientY - caja.top}px`);
+    });
+  }
+</script>
