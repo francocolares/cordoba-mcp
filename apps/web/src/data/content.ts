@@ -53,7 +53,12 @@ export type Fuente = {
   nota: string;
 };
 
-/** La `nota` de las fuentes activas se completa en el build con el conteo real. */
+/**
+ * La `nota` es el conteo real, y lo completa el build: sólo la llevan las
+ * fuentes activas. Las pendientes van sin nota a propósito, porque la grilla
+ * cuenta la intención de mapear estos datos, no en qué estado está cada
+ * relevamiento.
+ */
 export const fuentes: Fuente[] = [
   {
     nombre: "Agenda de eventos",
@@ -71,7 +76,7 @@ export const fuentes: Fuente[] = [
     responde:
       "Cuándo es Cosquín, la Doma de Jesús María o la fiesta del pueblo, con la fecha oficial.",
     lista: false,
-    nota: "fuente verificada",
+    nota: "",
   },
   {
     nombre: "Atracciones naturales",
@@ -80,7 +85,7 @@ export const fuentes: Fuente[] = [
     responde:
       "Qué cascada, cerro o reserva te queda a mano para el día, cómo se llega y si hace falta permiso o guía.",
     lista: false,
-    nota: "sin relevar",
+    nota: "",
   },
   {
     nombre: "Teatros y museos de la Provincia",
@@ -88,7 +93,7 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "La programación de las salas y los museos provinciales, que hoy queda afuera.",
     lista: false,
-    nota: "fuente verificada",
+    nota: "",
   },
   {
     nombre: "Direcciones y coordenadas",
@@ -96,7 +101,7 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "Dónde queda cada sala para poder contestar qué hay cerca de donde estás.",
     lista: false,
-    nota: "fuente verificada",
+    nota: "",
   },
   {
     nombre: "Cine y cartelera",
@@ -104,7 +109,7 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "Qué se da hoy y a qué hora, en los cines y en las salas independientes.",
     lista: false,
-    nota: "fuente parcial",
+    nota: "",
   },
   {
     nombre: "Farmacias de turno",
@@ -121,7 +126,7 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "Qué línea te deja donde vas y dónde está la parada.",
     lista: false,
-    nota: "fuente desactualizada",
+    nota: "",
   },
   {
     nombre: "Trámites",
@@ -129,7 +134,7 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "Dónde se hace cada cosa, qué papeles llevar y hasta qué hora atienden.",
     lista: false,
-    nota: "buscando fuente",
+    nota: "",
   },
   {
     nombre: "Boletín Oficial",
@@ -138,7 +143,7 @@ export const fuentes: Fuente[] = [
     responde:
       "Qué ordenanza, decreto o licitación se publicó, para poder contestar qué cambió y desde cuándo rige.",
     lista: false,
-    nota: "sin relevar · se puede scrapear",
+    nota: "",
   },
   {
     nombre: "Catastro y valores de suelo",
@@ -147,7 +152,7 @@ export const fuentes: Fuente[] = [
     responde:
       "Qué parcela es cada lote, cómo está zonificado y cuánto vale el suelo en esa cuadra.",
     lista: false,
-    nota: "sin relevar",
+    nota: "",
   },
   {
     nombre: "Ferias de barrio",
@@ -155,6 +160,6 @@ export const fuentes: Fuente[] = [
     enlace: null,
     responde: "Qué días hay feria de productores y en qué plaza.",
     lista: false,
-    nota: "sin fuente estable",
+    nota: "",
   },
 ];
