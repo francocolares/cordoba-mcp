@@ -13,7 +13,7 @@ packages/core  @cordoba/core: gviz, normalización, store, validador, queries, t
 data/          datos commiteados (git scraping): events.jsonl, changes.jsonl, status.json, raw/
 ```
 
-Los 6 tools están definidos una sola vez, en `packages/core/src/tools.ts`, y los consumen los dos
+Los 11 tools están definidos una sola vez, en `packages/core/src/tools.ts`, y los consumen los dos
 transportes: stdio (`apps/mcp`) y HTTP (`apps/worker`).
 
 ## Puesta en marcha
@@ -49,18 +49,77 @@ Detalles de la fuente que conviene recordar:
 - `Precio` sólo distingue `0` (gratis), `Con costo` y `Comprá tu entrada en “Inscribite”`.
 - Zona horaria: `America/Argentina/Cordoba`, UTC-3 fijo (sin horario de verano).
 
+### Farmacias de turno (Colegio de Farmacéuticos)
+
+El cronograma anual de **guardias obligatorias** no es una API: es un `.xls` que circula por Drive.
+El endpoint `export?format=xlsx` responde anónimo, pero el zip **no es reproducible** (cambia en
+cada descarga), así que el detector de cambios compara el hash del _contenido normalizado_, no del
+binario. El archivo se commitea en `data/raw/farmacias/turnero-<año>.xlsx` y es la fuente de verdad
+del año: los builds no dependen del link.
+
+Crédito de los datos: **Colegio de Farmacéuticos de la Provincia de Córdoba**.
+
+Forma de la planilla (verificada contra el turnero 2026):
+
+- Hoja `TURNERO <año>`: col A = día del mes, y una columna por mes (`enero`..`diciembre`) cuya celda
+  es el **número de turno (1..30)**. Hay una columna que repite el día, así que los meses se mapean
+  por su encabezado y **no** por posición.
+- Hojas `1`..`30`: col A = **sección** (viene sólo en la primera fila de cada sección: hay que
+  arrastrarla) y col B = `NOMBRE - dirección Bº barrio`. En 2026 hay 851 farmacias en 16 secciones
+  (la 15 no existe), entre 24 y 34 por turno.
+- **Cada farmacia pertenece a un solo turno**: el turno es un atributo de la farmacia, no una fila
+  de calendario. El `id` sale de `sha1(celda normalizada)[:12]` porque los nombres se repiten (hay
+  dos `LOS ANDES`, dos `ALVEAR`).
+- La rotación es un **ciclo de 30 días** exacto: los 365 días de 2026 cumplen
+  `turno = (turno_anterior mod 30) + 1`, con ancla `2026-01-02 → turno 1`. El validador lo verifica;
+  si algún año se desvía, es un cambio deliberado del Colegio (o un typo) y queremos verlo.
+- El corte nombre/dirección es heurístico: el primer guion con espacio a algún lado, salteando el
+  que antecede al barrio (`MADUSSI-Libertad 2033 - B° General Paz`). Las 20 filas sin guion se
+  adivinan por el prefijo en mayúsculas y quedan marcadas con `parse_confidence: "baja"`. El crudo
+  se conserva siempre en `raw`.
+- Las coordenadas salen de geocodificar la dirección **una sola vez**, con la cache commiteada en
+  `data/farmacias/geocode.json` (el artefacto caro del dataset). Son dos pasadas:
+  1. **Georef** (`apis.datos.gob.ar`), el servicio oficial de direcciones normalizadas de
+     Argentina: acepta **lotes** (un POST resuelve 100 direcciones), no tiene rate limit y entiende
+     la nomenclatura local —`Rep. De Siria` → `RCA DE SIRIA`, `Bv.Ocampo` → `BV GRL OCAMPO`—, que es
+     justo donde Nominatim falla con esta planilla. Resolvió **606 de 728 en 9 requests y segundos**.
+  2. **Nominatim** (OSM) para el resto, a 1 request por segundo, porque es el único que tiene el
+     fallback por barrio. Nominatim **devuelve 503 en tandas largas aunque respetes el límite**: el
+     geocoder reintenta con espera creciente, guarda la cache cada 25 direcciones y se puede cortar
+     y retomar. Por eso Georef va primero: sin él, una corrida completa son horas y en CI no cierra.
+
+  Las abreviaturas de la planilla se expanden antes de consultar (`Av.`, `Bv.`, `Gral.`, `Cnel.`,
+  `Dnto` → `Donato`...) y cada resultado se valida contra la caja de la ciudad: un match en Buenos
+  Aires se descarta. La precisión queda registrada por farmacia (`exacta` con altura, `calle`,
+  `barrio`, `ninguna`) y viaja en las respuestas del MCP.
+
+> **Lo único que falta confirmar:** la planilla **no dice de qué hora a qué hora corre la guardia**
+> (no hay leyenda ni nota en ninguna de las 31 hojas). La ventana se asume de 08:30 a 08:30 del día
+> siguiente, viaja declarada en cada respuesta con `confirmed: false` y se configura con
+> `FARMACIAS_TURNO_START` / `FARMACIAS_TURNO_HORAS` / `FARMACIAS_TURNO_CONFIRMADO`. El código ya
+> maneja el cruce de medianoche: a las 02:00 del martes sigue de turno la farmacia del lunes.
+
 ## Uso
 
 ```bash
 pnpm install
 pnpm build                # compila core, mcp, scraper y web
-pnpm test                 # vitest (92 tests, con fixtures reales en tests/fixtures/)
+pnpm test                 # vitest (165 tests, con fixtures reales en tests/fixtures/)
 pnpm lint                 # biome; pnpm format para arreglar
 
 node apps/scraper/dist/index.js validate   # ¿sigue igual la fuente? exit 1 si hay FAIL
 node apps/scraper/dist/index.js scrape     # baja la planilla y actualiza data/
 node apps/scraper/dist/index.js run        # validate + scrape (no scrapea si hay FAIL)
+
+# farmacias de turno (una vez al año, no en el cron diario)
+node apps/scraper/dist/index.js farmacias validate   # parsea y valida, sin escribir nada
+node apps/scraper/dist/index.js farmacias ingest     # persiste data/farmacias/
+node apps/scraper/dist/index.js farmacias geocode    # geocodifica lo que falte y actualiza la cache
 ```
+
+Opciones de `farmacias`: `--file <path>` (default: el `.xlsx` commiteado), `--download` (bajarlo de
+Drive), `--url <url>`, `--year <aaaa>`; y para el geocoder `--limit <n>`, `--retry-failed`,
+`--skip-georef` y `--skip-nominatim` (útil para quedarse sólo con la pasada rápida).
 
 En desarrollo, sin compilar: `pnpm --filter @cordoba/scraper run run` (usa `tsx`).
 
@@ -75,6 +134,20 @@ En desarrollo, sin compilar: `pnpm --filter @cordoba/scraper run run` (usa `tsx`
 
 Correr `scrape` dos veces con los mismos datos no genera cambios más allá de `last_seen`.
 
+### Qué escribe la ingesta de farmacias
+
+| Archivo                                 | Contenido                                                                   |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `data/raw/farmacias/turnero-<año>.xlsx` | la planilla original: fuente de verdad del año                              |
+| `data/farmacias/pharmacies.jsonl`       | una farmacia por línea, ordenada por `id`, con turno, sección y coordenadas |
+| `data/farmacias/turnos.json`            | un calendario por año: `fecha -> turno`, más el ancla del ciclo             |
+| `data/farmacias/geocode.json`           | cache de geocoding por dirección normalizada (el artefacto caro)            |
+| `data/farmacias/changes.jsonl`          | log append-only: altas, bajas y **cambios de turno** con diff               |
+| `data/farmacias/status.json`            | último run: validación, conteos, años cargados y hash de contenido          |
+
+Las coordenadas **no entran al `content_hash`**: volver a geocodificar no genera un `updated`
+espurio en `changes.jsonl`.
+
 ### Validador
 
 `validate` corre, en orden: la página responde → el `<script>` del bundle sigue ahí → el sheet ID
@@ -84,6 +157,16 @@ sigue siendo el mismo → las 15 columnas no cambiaron. Niveles: **FAIL** (`bund
 `run` no scrapea si hay FAIL, para no marcar todos los eventos como `removed` por un cambio de fuente.
 Para probar ese camino: `AGENDA_SHEET_ID=<id-falso> node apps/scraper/dist/index.js run` → exit 1,
 `data/events.jsonl` intacto y `status.json` con `scraped: false`.
+
+### Validador del turnero
+
+`farmacias validate` chequea: están las 30 hojas de turno → el calendario cubre el año completo →
+la rotación respeta el ciclo de 30 días → cada turno tiene una cantidad razonable de farmacias →
+las secciones están en rango → no hay filas duplicadas. Niveles: **FAIL** (`turnos_faltantes`,
+`calendario_incompleto`, `turnos_vacios`), **WARN** (`ciclo_roto`, `turnos_flacos`,
+`anio_inesperado`, `secciones_fuera_de_rango`, `filas_duplicadas`) e **INFO** (`parseo`: cuántas
+filas se adivinaron). Con FAIL **no se persiste nada**, para no dar de baja 851 farmacias por un
+archivo mal exportado.
 
 ## MCP
 
@@ -114,10 +197,22 @@ Tools:
 | `this_weekend`    | `free_only?`, `category?` (viernes 18:00 → domingo 23:59)                                |
 | `get_event`       | `id` (devuelve el evento completo, sin truncar)                                          |
 | `list_categories` | —                                                                                        |
-| `source_status`   | —                                                                                        |
+| `source_status`   | — (reporta las dos fuentes)                                                              |
 
-Más el resource `agenda://status`. Toda respuesta incluye `source`, `timezone` y `data_as_of`; en
-los listados la `description` se trunca a 300 caracteres.
+Farmacias de turno:
+
+| Tool                 | Parámetros                                                                   |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `pharmacies_on_duty` | `date?` (`ahora` por default), `barrio?`, `near_lat?`, `near_lon?`, `limit?` |
+| `pharmacies_near`    | `lat`, `lon`, `radius_km?` (3), `date?`, `limit?`                            |
+| `duty_turno_on`      | `date?` → número de turno y conteo por sección, sin listar las 851           |
+| `find_pharmacy`      | `query` (nombre, calle o barrio) → en qué turno está y sus próximas guardias |
+| `get_pharmacy`       | `id`                                                                         |
+
+Más el resource `agenda://status`. Toda respuesta incluye `source`, `source_url`, `timezone` y
+`data_as_of` **de la fuente que la sirvió**; en los listados de la agenda la `description` se trunca
+a 300 caracteres. Las respuestas de farmacias agregan `turno_window` y `disclaimer`, y marcan
+`turno_derivado_del_ciclo: true` cuando la fecha cae fuera de los años con turnero cargado.
 
 Smoke test de extremo a extremo (levanta el server y llama a cada tool):
 
@@ -136,17 +231,22 @@ emite el certificado solo, pero la zona tiene que estar en la **misma cuenta de 
 Worker.
 
 
-| Ruta                | Qué devuelve                                                    |
-| ------------------- | --------------------------------------------------------------- |
-| `/`                 | la landing de Astro (assets estáticos, binding `ASSETS`)        |
-| `/mcp`              | MCP por streamable HTTP (sólo POST; sin SSE ni Durable Objects) |
-| `/health`           | conteos, `data_as_of` y resultado de la última validación       |
-| `/api/events.jsonl` | los eventos crudos, para consumirlos sin MCP                    |
-| `/api/status.json`  | el `status.json` del último run                                 |
+| Ruta                         | Qué devuelve                                                    |
+| ---------------------------- | --------------------------------------------------------------- |
+| `/`                          | la landing de Astro (assets estáticos, binding `ASSETS`)        |
+| `/mcp`                       | MCP por streamable HTTP (sólo POST; sin SSE ni Durable Objects) |
+| `/health`                    | conteos, `data_as_of` y resultado de la última validación       |
+| `/api/events.jsonl`          | los eventos crudos, para consumirlos sin MCP                    |
+| `/api/status.json`           | el `status.json` del último run                                 |
+| `/api/farmacias.jsonl`       | las farmacias crudas, con turno, sección y coordenadas          |
+| `/api/farmacias/turnos.json` | los calendarios `fecha -> turno` por año                        |
+| `/api/farmacias/status.json` | el `status.json` de la última ingesta del turnero               |
 
-Los eventos **viajan embebidos en el bundle**: `scripts/embed-data.mjs` convierte
-`data/events.jsonl` en un módulo TypeScript antes de cada build (~60 KB gzip en total, el límite es
-3 MB). No hay KV ni D1: cada commit del scraper dispara un deploy y así se actualizan los datos.
+Los datos **viajan embebidos en el bundle**: `scripts/embed-data.mjs` convierte `data/events.jsonl`
+y `data/farmacias/` en un módulo TypeScript antes de cada build (el límite del Worker es 3 MB
+comprimido y las 851 farmacias suman ~400 KB sin comprimir). No hay KV ni D1: cada commit de datos
+dispara un deploy y así se actualizan. Si falta el dataset de farmacias, el Worker arranca igual y
+los tools de guardias responden un error explícito.
 
 ```bash
 pnpm dev:worker    # wrangler dev en :8787 (o --port) con los assets de Astro
@@ -208,8 +308,16 @@ claude mcp add --transport http cordoba-mcp https://cordobamcp.com/mcp
 `validate` → `scrape` → commit de `data/`. Si la validación falla, abre **un solo** issue con la
 label `scraper-alert` y no commitea. El primer run se hace a mano con `workflow_dispatch`.
 
+`.github/workflows/farmacias.yml` tiene dos caras, porque el turnero es un archivo anual y no un
+feed: el cron del **día 5 de cada mes** sólo baja la planilla y compara el hash de contenido, y abre
+un issue (label `farmacias-alert`) si cambió **o si desde octubre no está el turnero del año
+siguiente** — sin ese aviso el dataset se degrada en silencio el 1 de enero. La ingesta de verdad se
+dispara a mano (`workflow_dispatch` con `ingest: true`): valida, geocodifica lo nuevo, commitea
+`data/farmacias/` y llama al deploy. El paso de geocoding es `continue-on-error`: si Nominatim nos
+limita a mitad de camino, lo resuelto se commitea igual y el próximo run retoma.
+
 `.github/workflows/deploy.yml` corre lint + tests + build y publica el Worker con
-`cloudflare/wrangler-action`, y después verifica `/health` y las 6 tools contra la URL desplegada.
+`cloudflare/wrangler-action`, y después verifica `/health` y las tools contra la URL desplegada.
 Se dispara con un push a `main`, a mano, o llamado por el scraper cuando dejó datos nuevos (los
 push hechos con `GITHUB_TOKEN` no disparan workflows, así que el scrape invoca el deploy como
 workflow reutilizable).

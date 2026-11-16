@@ -39,7 +39,22 @@ const show = async (name, args) => {
   if (j.categories) console.log(`  ${JSON.stringify(j.categories)}`);
   if (j.range) console.log("  range:", j.range);
   if (j.event) console.log("  event:", j.event.title, "| link:", j.link);
-  if (j.status) console.log("  status:", j.status.validation.status, j.status.counts);
+  if (j.agenda)
+    console.log("  agenda:", j.agenda.status?.validation?.status, j.agenda.status?.counts);
+  if (j.farmacias) console.log("  farmacias:", JSON.stringify(j.farmacias.years ?? j.farmacias));
+  if (j.pharmacies)
+    console.log(
+      "  " +
+        j.pharmacies
+          .slice(0, 3)
+          .map(
+            (p) =>
+              `turno ${p.turno} secc ${p.section} ${p.name ?? p.raw}` +
+              (p.distance_km === undefined ? "" : ` (${p.distance_km} km)`),
+          )
+          .join("\n  "),
+    );
+  if (j.sections) console.log("  secciones:", JSON.stringify(j.sections));
 };
 await show("search_events", { query: "museo", limit: 3 });
 await show("search_events", { free_only: true, limit: 3 });
@@ -60,4 +75,27 @@ console.log(
 );
 const bad = await client.callTool({ name: "get_event", arguments: { id: "nope" } });
 console.log("get_event inexistente isError:", bad.isError);
+
+// --- farmacias de turno
+await show("duty_turno_on", { date: "hoy" });
+await show("pharmacies_on_duty", { date: "hoy", limit: 3 });
+// Plaza San Martín, para ver el orden por distancia.
+await show("pharmacies_near", { lat: -31.4201, lon: -64.1888, radius_km: 2, limit: 3 });
+await show("find_pharmacy", { query: "farmacity", limit: 2 });
+const farmacia = JSON.parse(
+  (await client.callTool({ name: "pharmacies_on_duty", arguments: { limit: 1 } })).content[0].text,
+).pharmacies[0];
+if (farmacia) {
+  const detalle = JSON.parse(
+    (await client.callTool({ name: "get_pharmacy", arguments: { id: farmacia.id } })).content[0]
+      .text,
+  );
+  console.log(
+    "\n== get_pharmacy",
+    detalle.pharmacy.name,
+    "| próximas guardias:",
+    detalle.next_duty_dates.map((d) => `${d.date}${d.derived ? " (proyectada)" : ""}`).join(", "),
+  );
+  console.log("  ventana:", JSON.stringify(detalle.turno_window), "\n  ", detalle.disclaimer);
+}
 await client.close();

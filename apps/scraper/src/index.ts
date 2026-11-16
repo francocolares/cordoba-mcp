@@ -15,19 +15,70 @@ import {
   validateSource,
 } from "@cordoba/core";
 
-const USAGE = `uso: cordoba-scraper <comando> [--data <dir>]
+import { type FarmaciasArgs, runGeocode, runIngest } from "./farmacias.js";
 
-comandos:
+const USAGE = `uso: cordoba-scraper <comando> [opciones]
+
+agenda turística (Municipalidad):
   validate   verifica que la fuente no cambió (exit 1 si hay FAIL)
   scrape     baja la planilla y actualiza data/ con histórico
   run        validate + scrape (no scrapea si la validación falla)
+
+farmacias de turno (Colegio de Farmacéuticos):
+  farmacias validate   parsea y valida el turnero sin escribir nada
+  farmacias ingest     parsea, valida y persiste data/farmacias/
+  farmacias geocode    geocodifica lo que falta y actualiza la cache
+
+opciones:
+  --data <dir>     directorio de datos (default: data)
+  --file <path>    .xlsx del turnero (default: el snapshot commiteado)
+  --url <url>      bajar el turnero de otra URL
+  --download       ignorar el snapshot y bajar el turnero de Drive
+  --year <aaaa>    año esperado del turnero
+  --limit <n>      máximo de direcciones a geocodificar en esta tanda (pasada Nominatim)
+  --retry-failed   reintentar las direcciones que no resolvieron
+  --skip-georef    saltear la pasada por lotes de Georef
+  --skip-nominatim saltear la pasada de Nominatim (la lenta)
 `;
 
-function parseArgs(argv: string[]): { command: string; dataDir: string } {
-  const command = argv[0] ?? "";
-  const dataIndex = argv.indexOf("--data");
-  const dataDir = dataIndex >= 0 ? (argv[dataIndex + 1] ?? "data") : "data";
-  return { command, dataDir };
+interface Args {
+  command: string;
+  subcommand: string;
+  dataDir: string;
+  file?: string | undefined;
+  url?: string | undefined;
+  year?: number | undefined;
+  limit?: number | undefined;
+  download: boolean;
+  retryFailed: boolean;
+  skipGeoref: boolean;
+  skipNominatim: boolean;
+}
+
+function parseArgs(argv: string[]): Args {
+  const flag = (name: string): string | undefined => {
+    const index = argv.indexOf(`--${name}`);
+    return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const number = (name: string): number | undefined => {
+    const value = flag(name);
+    if (value === undefined) return undefined;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  return {
+    command: argv[0] ?? "",
+    subcommand: argv[1]?.startsWith("--") ? "" : (argv[1] ?? ""),
+    dataDir: flag("data") ?? "data",
+    file: flag("file"),
+    url: flag("url"),
+    year: number("year"),
+    limit: number("limit"),
+    download: argv.includes("--download"),
+    retryFailed: argv.includes("--retry-failed"),
+    skipGeoref: argv.includes("--skip-georef"),
+    skipNominatim: argv.includes("--skip-nominatim"),
+  };
 }
 
 function printJson(value: unknown): void {
@@ -69,8 +120,28 @@ async function saveValidationOnlyStatus(
 }
 
 async function main(): Promise<number> {
-  const { command, dataDir } = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2));
+  const { command, dataDir } = args;
   const paths = dataPaths(dataDir);
+
+  if (command === "farmacias") {
+    const farmaciasArgs: FarmaciasArgs = {
+      dataDir,
+      file: args.file,
+      url: args.url,
+      year: args.year,
+      limit: args.limit,
+      download: args.download,
+      retryFailed: args.retryFailed,
+      skipGeoref: args.skipGeoref,
+      skipNominatim: args.skipNominatim,
+    };
+    if (args.subcommand === "ingest") return runIngest(farmaciasArgs, true);
+    if (args.subcommand === "validate") return runIngest(farmaciasArgs, false);
+    if (args.subcommand === "geocode") return runGeocode(farmaciasArgs);
+    process.stderr.write(USAGE);
+    return 2;
+  }
 
   if (command === "validate") {
     const result = await runValidate(dataDir);

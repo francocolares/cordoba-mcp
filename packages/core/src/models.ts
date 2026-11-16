@@ -77,6 +77,18 @@ export const CONTENT_FIELDS = [
   "status_raw",
 ] as const satisfies readonly (keyof Event)[];
 
+/** Conteos de un run de merge. Los comparten la agenda y las farmacias. */
+export const CountsSchema = z.object({
+  total: z.number().int(),
+  active: z.number().int(),
+  inactive: z.number().int(),
+  added: z.number().int(),
+  updated: z.number().int(),
+  removed: z.number().int(),
+  readded: z.number().int(),
+});
+export type Counts = z.infer<typeof CountsSchema>;
+
 export const ChangeRecordSchema = z.object({
   at: z.string(),
   kind: z.enum(["added", "updated", "removed", "readded"]),
@@ -100,6 +112,8 @@ export const ValidationResultSchema = z.object({
   checks: z.array(CheckSchema),
   schema_hash: z.string().nullable(),
   bundle_hash: z.string().nullable(),
+  /** Huella del contenido normalizado. La usan las fuentes que son un archivo. */
+  content_hash: z.string().nullable().optional(),
   row_count: z.number().int().nullable(),
 });
 export type ValidationResult = z.infer<typeof ValidationResultSchema>;
@@ -108,15 +122,7 @@ export const RunStatusSchema = z.object({
   last_run: z.string(),
   validation: ValidationResultSchema.nullable(),
   scraped: z.boolean(),
-  counts: z.object({
-    total: z.number().int(),
-    active: z.number().int(),
-    inactive: z.number().int(),
-    added: z.number().int(),
-    updated: z.number().int(),
-    removed: z.number().int(),
-    readded: z.number().int(),
-  }),
+  counts: CountsSchema,
   source: z.string(),
   schema_hash: z.string().nullable(),
   bundle_hash: z.string().nullable(),

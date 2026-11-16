@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
-
+import type { FarmaciasStatus } from "./farmacias/models.js";
+import { TurnoCalendarsSchema } from "./farmacias/models.js";
+import { parsePharmaciesJsonl } from "./farmacias/store.js";
 import type { RunStatus } from "./models.js";
 import { dataPaths, parseEventsJsonl } from "./store.js";
-import type { AgendaSnapshot } from "./tools.js";
+import type { AgendaDataset, FarmaciasDataset, Snapshot } from "./tools.js";
 
-export interface Dataset extends AgendaSnapshot {
+export interface Dataset extends AgendaDataset {
   loaded_at: number;
 }
 
@@ -23,6 +25,14 @@ async function fetchText(url: string): Promise<string> {
 
 async function readSource(target: string, isUrl: boolean): Promise<string> {
   return isUrl ? fetchText(target) : readFile(target, "utf8");
+}
+
+async function readOptional(target: string, isUrl: boolean): Promise<string | null> {
+  try {
+    return await readSource(target, isUrl);
+  } catch {
+    return null;
+  }
 }
 
 export async function loadDataset(options: DatasetOptions = {}): Promise<Dataset> {
@@ -49,6 +59,54 @@ export async function loadDataset(options: DatasetOptions = {}): Promise<Dataset
   return { events, status, data_as_of: dataAsOf, loaded_at: Date.now() };
 }
 
+/** Las farmacias viven en `<data>/farmacias/`, al lado de events.jsonl. */
+export function farmaciasBase(eventsTarget: string): string {
+  return eventsTarget.replace(/events\.jsonl$/, "farmacias/");
+}
+
+export async function loadFarmaciasDataset(
+  options: DatasetOptions = {},
+): Promise<FarmaciasDataset | null> {
+  const url = options.url;
+  const isUrl = Boolean(url);
+  const base = farmaciasBase(url ?? options.path ?? dataPaths().events);
+
+  const pharmaciesText = await readOptional(`${base}pharmacies.jsonl`, isUrl);
+  if (pharmaciesText === null) return null;
+  const pharmacies = parsePharmaciesJsonl(pharmaciesText);
+
+  const turnosText = await readOptional(`${base}turnos.json`, isUrl);
+  const calendars = turnosText ? TurnoCalendarsSchema.parse(JSON.parse(turnosText)).calendars : [];
+
+  const statusText = await readOptional(`${base}status.json`, isUrl);
+  const status = statusText ? (JSON.parse(statusText) as FarmaciasStatus) : null;
+
+  let latestSeen = "";
+  for (const pharmacy of pharmacies) {
+    if (pharmacy.last_seen > latestSeen) latestSeen = pharmacy.last_seen;
+  }
+
+  return {
+    pharmacies,
+    calendars,
+    status,
+    data_as_of: status?.last_run ?? latestSeen ?? new Date().toISOString(),
+  };
+}
+
+export interface LoadedSnapshot extends Snapshot {
+  loaded_at: number;
+}
+
+/** Las dos fuentes juntas: es lo que consumen los tools. */
+export async function loadSnapshot(options: DatasetOptions = {}): Promise<LoadedSnapshot> {
+  const [agenda, farmacias] = await Promise.all([
+    loadDataset(options),
+    loadFarmaciasDataset(options),
+  ]);
+  return { agenda, farmacias, loaded_at: Date.now() };
+}
+
 /** Cache en memoria con TTL (default 10 minutos). */
 export class DatasetCache {
   private cached: Dataset | null = null;
@@ -61,6 +119,25 @@ export class DatasetCache {
   async get(): Promise<Dataset> {
     if (this.cached && Date.now() - this.cached.loaded_at < this.ttlMs) return this.cached;
     this.cached = await loadDataset(this.options);
+    return this.cached;
+  }
+
+  invalidate(): void {
+    this.cached = null;
+  }
+}
+
+export class SnapshotCache {
+  private cached: LoadedSnapshot | null = null;
+  private readonly ttlMs: number;
+
+  constructor(private readonly options: DatasetOptions = {}) {
+    this.ttlMs = options.ttlMs ?? 10 * 60 * 1000;
+  }
+
+  async get(): Promise<LoadedSnapshot> {
+    if (this.cached && Date.now() - this.cached.loaded_at < this.ttlMs) return this.cached;
+    this.cached = await loadSnapshot(this.options);
     return this.cached;
   }
 

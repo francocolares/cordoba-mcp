@@ -7,6 +7,7 @@ export const PROJECT = "cordoba-mcp" as const;
 export * from "./categories.js";
 export * from "./config.js";
 export * from "./datetime.js";
+export * from "./farmacias/web.js";
 export * from "./models.js";
 export * from "./query.js";
 export * from "./text.js";

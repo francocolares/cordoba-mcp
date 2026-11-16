@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EVENTS } from "../apps/worker/src/data.generated.js";
+import { EVENTS, PHARMACIES, TURNO_CALENDARS } from "../apps/worker/src/data.generated.js";
 import worker, { type Env } from "../apps/worker/src/index.js";
 
 /** El binding de assets, simulado: devolvemos un marcador para ver que delega. */
@@ -31,6 +31,32 @@ describe("rutas del Worker", () => {
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ ok: true, events: EVENTS.length });
     expect(body["data_as_of"]).toBeTruthy();
+  });
+
+  it("/health informa las dos fuentes embebidas", async () => {
+    const body = (await (await call("/health")).json()) as {
+      sources: { agenda: { events: number }; farmacias: { pharmacies: number } | null };
+    };
+    expect(body.sources.agenda.events).toBe(EVENTS.length);
+    if (PHARMACIES.length > 0) {
+      expect(body.sources.farmacias?.pharmacies).toBe(PHARMACIES.length);
+    } else {
+      expect(body.sources.farmacias).toBeNull();
+    }
+  });
+
+  it("sirve las farmacias y el turnero como datos crudos", async () => {
+    const jsonl = await call("/api/farmacias.jsonl");
+    expect(jsonl.headers.get("content-type")).toContain("application/x-ndjson");
+    const lines = (await jsonl.text()).trim().split("\n").filter(Boolean);
+    expect(lines).toHaveLength(PHARMACIES.length);
+
+    const turnos = (await (await call("/api/farmacias/turnos.json")).json()) as {
+      calendars: unknown[];
+    };
+    expect(turnos.calendars).toHaveLength(TURNO_CALENDARS.length);
+
+    expect((await call("/api/farmacias/status.json")).status).toBe(200);
   });
 
   it("delega al binding de assets lo que no es /mcp ni /api", async () => {
@@ -88,7 +114,7 @@ describe("JSON-RPC del MCP", () => {
     expect(json).toBeNull();
   });
 
-  it("tools/list devuelve las 6 tools con JSON Schema", async () => {
+  it("tools/list devuelve las tools de las dos fuentes con JSON Schema", async () => {
     const { json } = (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" })) as {
       json: { result: { tools: { name: string; inputSchema: Record<string, unknown> }[] } };
     };
@@ -100,6 +126,11 @@ describe("JSON-RPC del MCP", () => {
       "get_event",
       "list_categories",
       "source_status",
+      "pharmacies_on_duty",
+      "pharmacies_near",
+      "duty_turno_on",
+      "find_pharmacy",
+      "get_pharmacy",
     ]);
     const search = tools[0]!.inputSchema as { properties: Record<string, unknown> };
     expect(Object.keys(search.properties)).toContain("free_only");
@@ -166,7 +197,9 @@ describe("JSON-RPC del MCP", () => {
       method: "resources/read",
       params: { uri: "agenda://status" },
     })) as { json: { result: { contents: { text: string }[] } } };
-    expect(JSON.parse(read.json.result.contents[0]!.text).status.validation.status).toBeTruthy();
+    const status = JSON.parse(read.json.result.contents[0]!.text);
+    expect(status.agenda.status.validation.status).toBeTruthy();
+    expect(status.farmacias).toBeTruthy();
 
     const missing = (await rpc({
       jsonrpc: "2.0",

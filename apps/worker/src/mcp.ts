@@ -3,7 +3,7 @@
  * responde con un único JSON (la spec lo permite y evita necesitar SSE/Durable
  * Objects). Las tools son las mismas que usa el servidor stdio: `TOOLS` de core.
  */
-import { type AgendaSnapshot, envelope, STATUS_RESOURCE, TOOLS } from "@cordoba/core/web";
+import { envelope, type Snapshot, STATUS_RESOURCE, TOOLS } from "@cordoba/core/web";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
@@ -40,7 +40,7 @@ function toolList() {
   }));
 }
 
-function callTool(snapshot: AgendaSnapshot, params: Record<string, unknown> | undefined) {
+function callTool(snapshot: Snapshot, params: Record<string, unknown> | undefined) {
   const name = typeof params?.["name"] === "string" ? (params["name"] as string) : null;
   const tool = TOOLS.find((t) => t.name === name);
   if (!tool) {
@@ -58,11 +58,14 @@ function callTool(snapshot: AgendaSnapshot, params: Record<string, unknown> | un
     } satisfies JsonRpcError;
   }
   const { data, isError } = tool.handler(snapshot, parsed.data);
-  return { content: textContent(envelope(snapshot, data)), ...(isError ? { isError: true } : {}) };
+  return {
+    content: textContent(envelope(tool, snapshot, data)),
+    ...(isError ? { isError: true } : {}),
+  };
 }
 
 /** Devuelve el `result` del método, o lanza un JsonRpcError. */
-function dispatch(snapshot: AgendaSnapshot, request: JsonRpcRequest): unknown {
+function dispatch(snapshot: Snapshot, request: JsonRpcRequest): unknown {
   switch (request.method) {
     case "initialize": {
       const asked = request.params?.["protocolVersion"];
@@ -124,7 +127,7 @@ function isJsonRpcError(value: unknown): value is JsonRpcError {
   return typeof value === "object" && value !== null && "code" in value && "message" in value;
 }
 
-function handleOne(snapshot: AgendaSnapshot, request: JsonRpcRequest): unknown | null {
+function handleOne(snapshot: Snapshot, request: JsonRpcRequest): unknown | null {
   const id = request.id ?? null;
   // Las notificaciones (sin id) no llevan respuesta.
   const isNotification = request.id === undefined || request.id === null;
@@ -147,7 +150,7 @@ function handleOne(snapshot: AgendaSnapshot, request: JsonRpcRequest): unknown |
 }
 
 /** Procesa el body de un POST /mcp. `null` = sólo notificaciones (202 sin cuerpo). */
-export function handleMcpPayload(snapshot: AgendaSnapshot, payload: unknown): unknown | null {
+export function handleMcpPayload(snapshot: Snapshot, payload: unknown): unknown | null {
   if (Array.isArray(payload)) {
     const responses = payload
       .map((item) => handleOne(snapshot, item as JsonRpcRequest))

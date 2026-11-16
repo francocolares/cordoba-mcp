@@ -1,0 +1,54 @@
+{
+  "last_run": "2026-11-16T16:54:46.785Z",
+  "validation": {
+    "at": "2026-11-16T16:54:46.785Z",
+    "status": "ok",
+    "checks": [
+      {
+        "level": "ok",
+        "code": "turnos_ok",
+        "message": "Las 30 hojas de turno están presentes"
+      },
+      {
+        "level": "ok",
+        "code": "calendario_ok",
+        "message": "El calendario cubre los 365 días del 2026"
+      },
+      {
+        "level": "ok",
+        "code": "ciclo_ok",
+        "message": "La rotación respeta el ciclo de 30 días"
+      },
+      {
+        "level": "ok",
+        "code": "farmacias_por_turno_ok",
+        "message": "Entre 24 y 34 farmacias por turno"
+      },
+      {
+        "level": "info",
+        "code": "parseo",
+        "message": "20 de 851 filas sin guion separador; 1 sin dirección"
+      }
+    ],
+    "schema_hash": null,
+    "bundle_hash": null,
+    "content_hash": "518880272a57164de1fcadd60153d3ce12d5568a",
+    "row_count": 851
+  },
+  "counts": {
+    "total": 851,
+    "active": 851,
+    "inactive": 0,
+    "added": 851,
+    "updated": 0,
+    "removed": 0,
+    "readded": 0
+  },
+  "years": [
+    2026
+  ],
+  "geocoded": 744,
+  "pending_geocode": 107,
+  "source": "Cronograma de Guardias Obligatorias – Colegio de Farmacéuticos de la Provincia de Córdoba (colegio_farmaceuticos)",
+  "content_hash": "518880272a57164de1fcadd60153d3ce12d5568a"
+}

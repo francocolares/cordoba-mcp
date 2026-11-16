@@ -1,0 +1,206 @@
+name: farmacias-turnero
+
+# El turnero es un archivo anual, no un feed: no tiene sentido en el cron diario.
+# Este workflow hace dos cosas distintas:
+#   - `check` (cron mensual): baja la planilla y avisa si cambió, y desde octubre
+#     reclama el turnero del año siguiente. Sin eso, el dataset se cae a pique el
+#     1 de enero en silencio.
+#   - `ingest` (a mano): parsea, valida, geocodifica, commitea y dispara el deploy.
+on:
+  schedule:
+    - cron: "23 10 5 * *" # día 5 de cada mes, 07:23 hora de Córdoba
+  workflow_dispatch:
+    inputs:
+      ingest:
+        description: "Ingestar y commitear (si no, sólo chequea)"
+        type: boolean
+        default: false
+      year:
+        description: "Año esperado del turnero (default: el año en curso)"
+        type: string
+        required: false
+      download:
+        description: "Bajar la planilla de Drive en vez de usar el snapshot commiteado"
+        type: boolean
+        default: true
+      geocode:
+        description: "Geocodificar las direcciones nuevas (tarda ~1 segundo por dirección)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: farmacias-turnero
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'schedule' || inputs.ingest != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # El .xlsx que exporta Drive no es reproducible byte a byte, así que
+      # comparamos el hash del contenido normalizado que calcula el validador.
+      - id: check
+        run: |
+          set -uo pipefail
+          YEAR="${{ inputs.year || '' }}"
+          ARGS=(farmacias validate --download)
+          if [ -n "$YEAR" ]; then ARGS+=(--year "$YEAR"); fi
+          node apps/scraper/dist/index.js "${ARGS[@]}" > remoto.json
+          STATUS=$?
+          CURRENT=$(jq -r '.content_hash // "sin-dato"' data/farmacias/status.json 2>/dev/null || echo "sin-dato")
+          REMOTE=$(jq -r '.validation.content_hash // "sin-dato"' remoto.json)
+          VALIDATION=$(jq -r '.validation.status // "sin-dato"' remoto.json)
+          echo "local=$CURRENT remoto=$REMOTE validacion=$VALIDATION"
+          {
+            echo "current=$CURRENT"
+            echo "remote=$REMOTE"
+            echo "validation=$VALIDATION"
+            echo "exit=$STATUS"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: ¿Falta el turnero del año que viene?
+        id: nextyear
+        run: |
+          NEXT=$(( $(date -u +%Y) + 1 ))
+          MONTH=$(date -u +%-m)
+          MISSING=false
+          if [ "$MONTH" -ge 10 ] && [ ! -f "data/raw/farmacias/turnero-$NEXT.xlsx" ]; then
+            MISSING=true
+          fi
+          echo "year=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+
+      - name: Abrir issue si la planilla cambió o falta la del año que viene
+        if: steps.check.outputs.current != steps.check.outputs.remote || steps.check.outputs.validation == 'fail' || steps.nextyear.outputs.missing == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const check = ${{ toJSON(steps.check.outputs) }};
+            const nextYear = ${{ toJSON(steps.nextyear.outputs) }};
+            const body = [];
+            if (nextYear.missing === 'true') {
+              body.push(`### Falta el turnero ${nextYear.year}`);
+              body.push('');
+              body.push(`No está \`data/raw/farmacias/turnero-${nextYear.year}.xlsx\`. Sin él, el 1 de enero las respuestas pasan a proyectarse con el ciclo de 30 días (quedan marcadas con \`turno_derivado_del_ciclo: true\`) y dejan de reflejar la planilla oficial.`);
+              body.push('');
+            }
+            if (check.validation === 'fail') {
+              body.push('### La validación de la planilla falló');
+            } else if (check.current !== check.remote) {
+              body.push('### La planilla del Colegio cambió');
+              body.push('');
+              body.push(`- hash en el repo: \`${check.current}\``);
+              body.push(`- hash en Drive: \`${check.remote}\``);
+              body.push('');
+              body.push('Para ingestarla: Actions -> farmacias-turnero -> Run workflow, con `ingest: true`.');
+            }
+            body.push('');
+            body.push('<details><summary>Salida del validador</summary>');
+            body.push('');
+            body.push('```json');
+            body.push(fs.existsSync('remoto.json') ? fs.readFileSync('remoto.json', 'utf8') : 'sin salida');
+            body.push('```');
+            body.push('</details>');
+
+            const title = nextYear.missing === 'true'
+              ? `Falta el turnero de farmacias ${nextYear.year}`
+              : 'El turnero de farmacias cambió o falló la validación';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'farmacias-alert',
+            });
+            if (!open.data.some((i) => i.title === title)) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['farmacias-alert'],
+                body: body.join('\n'),
+              });
+            }
+
+  ingest:
+    if: github.event_name == 'workflow_dispatch' && inputs.ingest == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Ingestar el turnero
+        run: |
+          set -euo pipefail
+          ARGS=(farmacias ingest)
+          if [ "${{ inputs.download }}" = "true" ]; then ARGS+=(--download); fi
+          if [ -n "${{ inputs.year || '' }}" ]; then ARGS+=(--year "${{ inputs.year }}"); fi
+          node apps/scraper/dist/index.js "${ARGS[@]}"
+
+      # Dos pasadas: Georef por lotes (segundos) y Nominatim a 1 request por
+      # segundo para lo que quede. Con el cache commiteado sólo se piden las
+      # direcciones nuevas. `continue-on-error`: si Nominatim nos limita a mitad
+      # de camino, lo resuelto queda en la cache y se commitea igual.
+      - name: Geocodificar lo que falta
+        if: inputs.geocode
+        continue-on-error: true
+        run: node apps/scraper/dist/index.js farmacias geocode
+
+      - name: Commitear data/farmacias
+        id: commit
+        run: |
+          git config user.name "agenda-bot"
+          git config user.email "agenda-bot@users.noreply.github.com"
+          git add data/farmacias data/raw/farmacias
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Sin cambios en data/farmacias."
+          else
+            git commit -m "data: turnero de farmacias $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Turnero de farmacias"
+            echo
+            echo "- Farmacias: $(wc -l < data/farmacias/pharmacies.jsonl)"
+            echo "- Geocodificadas: $(jq -r '.geocoded' data/farmacias/status.json)"
+            echo "- Pendientes: $(jq -r '.pending_geocode' data/farmacias/status.json)"
+            echo "- Años: $(jq -c '.years' data/farmacias/status.json)"
+            echo "- Commiteado: ${{ steps.commit.outputs.changed }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Los push con GITHUB_TOKEN no disparan workflows: llamamos al deploy a mano.
+  deploy:
+    needs: ingest
+    if: needs.ingest.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy.yml
+    secrets: inherit

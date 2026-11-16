@@ -115,4 +115,5 @@ jobs:
             echo "- Verificado: ${SMOKE_URL:-(no verificado)}"
             echo "- MCP: ${SMOKE_URL:+$SMOKE_URL/mcp}"
             echo "- Eventos: $(wc -l < data/events.jsonl)"
+            echo "- Farmacias: $(wc -l < data/farmacias/pharmacies.jsonl 2>/dev/null || echo 0)"
           } >> "$GITHUB_STEP_SUMMARY"

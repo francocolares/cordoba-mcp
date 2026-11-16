@@ -15,7 +15,8 @@ console.log(`tools (${tools.length}):`, tools.map((t) => t.name).join(", "));
 const call = async (name, args) => {
   const res = await client.callTool({ name, arguments: args });
   const payload = JSON.parse(res.content[0].text);
-  const label = payload.count ?? payload.categories?.length ?? payload.event?.title ?? "ok";
+  const label =
+    payload.count ?? payload.categories?.length ?? payload.event?.title ?? payload.turno ?? "ok";
   console.log(`${name}(${JSON.stringify(args ?? {})}) -> ${label}`);
   return payload;
 };
@@ -33,6 +34,25 @@ console.log("resources:", resources.map((r) => r.uri).join(", "));
 const read = await client.readResource({ uri: "agenda://status" });
 console.log("agenda://status ->", read.contents[0].text.length, "bytes");
 
-console.log("\ndata_as_of:", status.data_as_of, "| validación:", status.status?.validation?.status);
+await call("duty_turno_on", { date: "hoy" });
+const guardia = await call("pharmacies_on_duty", { date: "hoy", limit: 3 });
+await call("pharmacies_near", { lat: -31.4201, lon: -64.1888, radius_km: 2, limit: 3 });
+await call("find_pharmacy", { query: "farmacity", limit: 2 });
+
+console.log(
+  "\ndata_as_of:",
+  status.data_as_of,
+  "| agenda:",
+  status.agenda?.status?.validation?.status,
+  "| farmacias:",
+  JSON.stringify(status.farmacias?.years ?? status.farmacias?.error),
+);
 console.log("finde:", weekend.range, `(${weekend.count} gratis)`);
+console.log(
+  "guardia de hoy: turno",
+  guardia.turno,
+  `(${guardia.total_del_turno} farmacias)`,
+  guardia.window,
+);
+console.log("disclaimer:", guardia.disclaimer);
 await client.close();

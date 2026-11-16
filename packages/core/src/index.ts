@@ -4,6 +4,7 @@ export * from "./categories.js";
 export * from "./config.js";
 export * from "./dataset.js";
 export * from "./datetime.js";
+export * from "./farmacias/index.js";
 export * from "./gviz.js";
 export * from "./models.js";
 export * from "./normalize.js";

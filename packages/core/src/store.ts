@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import {
   type ChangeRecord,
   CONTENT_FIELDS,
+  type Counts,
   type Event,
   EventSchema,
   type RunStatus,
@@ -106,44 +107,72 @@ export function schemaHash(columns: readonly string[]): string {
 export interface MergeResult {
   events: Event[];
   changes: ChangeRecord[];
-  counts: RunStatus["counts"];
+  counts: Counts;
 }
 
-function fieldDiff(prev: Event, next: Event): Record<string, [unknown, unknown]> {
+/** Lo mínimo que una entidad necesita para entrar al merge con histórico. */
+export interface Mergeable {
+  id: string;
+  content_hash: string;
+  active: boolean;
+  first_seen: string;
+  last_seen: string;
+}
+
+export interface MergeEntitiesResult<T> {
+  items: T[];
+  changes: ChangeRecord[];
+  counts: Counts;
+}
+
+function fieldDiff<T>(
+  previous: T,
+  next: T,
+  fields: readonly (keyof T)[],
+): Record<string, [unknown, unknown]> {
   const diff: Record<string, [unknown, unknown]> = {};
-  for (const field of CONTENT_FIELDS) {
-    if (prev[field] !== next[field]) diff[field] = [prev[field], next[field]];
+  for (const field of fields) {
+    if (previous[field] !== next[field]) diff[String(field)] = [previous[field], next[field]];
   }
   return diff;
 }
 
 /**
- * Funde el estado anterior con lo scrapeado:
+ * Funde el estado anterior con lo que trajo la fuente:
  * alta / sigue presente / baja (active=false, una sola vez) / readded.
+ * Genérico porque lo usan la agenda (eventos) y las farmacias.
  */
-export function merge(previous: Event[], scraped: Event[], now: string): MergeResult {
-  const byId = new Map(previous.map((e) => [e.id, e]));
-  const scrapedIds = new Set(scraped.map((e) => e.id));
+export function mergeEntities<T extends Mergeable>(
+  previous: T[],
+  fetched: T[],
+  now: string,
+  options: { contentFields: readonly (keyof T)[]; titleOf: (item: T) => string },
+): MergeEntitiesResult<T> {
+  const byId = new Map(previous.map((item) => [item.id, item]));
+  const fetchedIds = new Set(fetched.map((item) => item.id));
   const changes: ChangeRecord[] = [];
-  const result: Event[] = [];
-  const counts = { total: 0, active: 0, inactive: 0, added: 0, updated: 0, removed: 0, readded: 0 };
+  const result: T[] = [];
+  const counts: Counts = {
+    total: 0,
+    active: 0,
+    inactive: 0,
+    added: 0,
+    updated: 0,
+    removed: 0,
+    readded: 0,
+  };
 
-  for (const next of scraped) {
+  for (const next of fetched) {
     const prev = byId.get(next.id);
     if (!prev) {
       result.push({ ...next, first_seen: now, last_seen: now, active: true });
-      changes.push({ at: now, kind: "added", id: next.id, title: next.title });
+      changes.push({ at: now, kind: "added", id: next.id, title: options.titleOf(next) });
       counts.added++;
       continue;
     }
-    const merged: Event = {
-      ...next,
-      first_seen: prev.first_seen,
-      last_seen: now,
-      active: true,
-    };
+    result.push({ ...next, first_seen: prev.first_seen, last_seen: now, active: true });
     if (!prev.active) {
-      changes.push({ at: now, kind: "readded", id: next.id, title: next.title });
+      changes.push({ at: now, kind: "readded", id: next.id, title: options.titleOf(next) });
       counts.readded++;
     }
     if (prev.content_hash !== next.content_hash) {
@@ -151,18 +180,17 @@ export function merge(previous: Event[], scraped: Event[], now: string): MergeRe
         at: now,
         kind: "updated",
         id: next.id,
-        title: next.title,
-        fields: fieldDiff(prev, next),
+        title: options.titleOf(next),
+        fields: fieldDiff(prev, next, options.contentFields),
       });
       counts.updated++;
     }
-    result.push(merged);
   }
 
   for (const prev of previous) {
-    if (scrapedIds.has(prev.id)) continue;
+    if (fetchedIds.has(prev.id)) continue;
     if (prev.active) {
-      changes.push({ at: now, kind: "removed", id: prev.id, title: prev.title });
+      changes.push({ at: now, kind: "removed", id: prev.id, title: options.titleOf(prev) });
       counts.removed++;
       result.push({ ...prev, active: false });
     } else {
@@ -171,7 +199,15 @@ export function merge(previous: Event[], scraped: Event[], now: string): MergeRe
   }
 
   counts.total = result.length;
-  counts.active = result.filter((e) => e.active).length;
+  counts.active = result.filter((item) => item.active).length;
   counts.inactive = counts.total - counts.active;
-  return { events: result, changes, counts };
+  return { items: result, changes, counts };
+}
+
+export function merge(previous: Event[], scraped: Event[], now: string): MergeResult {
+  const { items, changes, counts } = mergeEntities(previous, scraped, now, {
+    contentFields: CONTENT_FIELDS,
+    titleOf: (event) => event.title,
+  });
+  return { events: items, changes, counts };
 }

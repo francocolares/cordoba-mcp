@@ -5,12 +5,12 @@ import { setDefaultResultOrder } from "node:dns";
 // preferimos IPv4 para que fetch no quede esperando.
 setDefaultResultOrder("ipv4first");
 
-import { DatasetCache, envelope, STATUS_RESOURCE, TOOLS } from "@cordoba/core";
+import { envelope, SnapshotCache, STATUS_RESOURCE, TOOLS } from "@cordoba/core";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { z } from "zod";
 
-const dataset = new DatasetCache({
+const dataset = new SnapshotCache({
   url: process.env["AGENDA_DATA_URL"],
   path: process.env["AGENDA_DATA_PATH"],
 });
@@ -25,7 +25,7 @@ for (const tool of TOOLS) {
       const snapshot = await dataset.get();
       const { data, isError } = tool.handler(snapshot, args);
       const content = [
-        { type: "text" as const, text: JSON.stringify(envelope(snapshot, data), null, 1) },
+        { type: "text" as const, text: JSON.stringify(envelope(tool, snapshot, data), null, 1) },
       ];
       return isError ? { content, isError: true } : { content };
     },
