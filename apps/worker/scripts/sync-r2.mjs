@@ -6,9 +6,10 @@
  * Lo corre el workflow que scrapea, no el deploy: así una actualización de
  * datos no necesita publicar el Worker de nuevo.
  *
- *   node apps/worker/scripts/sync-r2.mjs            # contra R2 (usa las credenciales del env)
- *   node apps/worker/scripts/sync-r2.mjs --local    # contra el R2 simulado de `wrangler dev`
- *   node apps/worker/scripts/sync-r2.mjs --dry-run  # sólo dice qué subiría
+ *   node apps/worker/scripts/sync-r2.mjs                  # contra R2 (credenciales del env)
+ *   node apps/worker/scripts/sync-r2.mjs --local          # contra el R2 simulado de `wrangler dev`
+ *   node apps/worker/scripts/sync-r2.mjs --dry-run        # sólo dice qué subiría
+ *   node apps/worker/scripts/sync-r2.mjs --ensure-bucket  # crea el bucket si no existe
  *
  * Las claves de los objetos son **estables** (se sobrescriben) y el manifest
  * lleva el hash del contenido: el Worker lo usa como versión de caché, y así no
@@ -138,6 +139,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dryRun = args.includes("--dry-run");
   const dataDir = args.find((a) => a.startsWith("--data-dir="))?.split("=")[1];
 
+  const ensureBucket = args.includes("--ensure-bucket");
   const bucket = bucketName();
   const { manifest, objects } = buildManifest(dataDir ? resolve(dataDir) : undefined);
   const scope = local ? "--local" : "--remote";
@@ -156,6 +158,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
     return { ok: res.status === 0, out: `${res.stdout ?? ""}${res.stderr ?? ""}` };
   };
+
+  // Crear el bucket es idempotente y lo hace la Action: así un deploy nunca
+  // falla por un bucket que no existe todavía. Necesita que el token tenga
+  // "Workers R2 Storage: Edit" y que la cuenta tenga R2 habilitado.
+  if (ensureBucket && !local && !dryRun) {
+    const created = wrangler(["r2", "bucket", "create", bucket]);
+    if (created.ok) console.log(`[sync-r2] bucket ${bucket} creado.`);
+    else if (/already (exists|owned)/i.test(created.out)) {
+      console.log(`[sync-r2] bucket ${bucket} ya existía.`);
+    } else {
+      console.error(`[sync-r2] no pude crear el bucket ${bucket}:\n${created.out.trim()}`);
+      console.error(
+        "[sync-r2] si habla del token, falta el permiso Workers R2 Storage: Edit;\n" +
+          "          si habla de la cuenta, hay que activar R2 una vez en el dashboard.",
+      );
+      process.exit(1);
+    }
+  }
 
   // El manifest que hay arriba nos dice qué objetos no hace falta volver a subir.
   const previousPath = join(tmp, "previous.json");

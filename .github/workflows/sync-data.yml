@@ -1,0 +1,83 @@
+name: sync-data
+
+# Publica los datasets de `data/` en R2, que es de donde los lee el Worker.
+# Subir a R2 ES publicar: no hace falta desplegar el Worker para que un dato
+# nuevo llegue al MCP.
+#
+# Lo llaman los workflows que scrapean (scrape-agenda, farmacias-turnero) y
+# también se puede correr a mano desde la pestaña Actions (Run workflow), que es
+# la forma de hacer la primera carga sin esperar al cron.
+#
+# Credenciales: el environment `prod`. El token necesita, además del permiso de
+# Workers que usa el deploy, `Workers R2 Storage: Edit` (crear el bucket y subir
+# objetos van por la API de Cloudflare con el mismo token).
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-data
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        # Cuando lo llama un scrape, el commit con los datos nuevos ya está en
+        # main: hay que traer ese, no el que disparó el workflow.
+        with:
+          ref: main
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `--ensure-bucket` es idempotente: crea el bucket la primera vez y no
+      # hace nada después.
+      - name: Subir los datos a R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node apps/worker/scripts/sync-r2.mjs --ensure-bucket
+
+      - name: Verificar que el MCP ya sirve los datos
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          set -euo pipefail
+          BASE="${PROD_URL:-https://cordobamcp.com}"
+          case "$BASE" in http://* | https://*) ;; *) BASE="https://$BASE" ;; esac
+          # El manifest se cachea 60s por isolate: reintentamos un rato.
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "$BASE/health" \
+              | jq -e '.data_source.error == null and (.collections | all(.available))' > /dev/null; then
+              echo "$BASE sirviendo los datos de R2 (intento $i)"
+              exit 0
+            fi
+            echo "intento $i: todavía no; reintento en 15s"
+            sleep 15
+          done
+          echo "::error::$BASE no está sirviendo los datos de R2"
+          curl -fsS --max-time 10 "$BASE/health" || true
+          exit 1
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Datos en R2"
+            echo
+            echo "- Eventos: $(wc -l < data/events.jsonl)"
+            echo "- Farmacias: $(wc -l < data/farmacias/pharmacies.jsonl 2>/dev/null || echo 0)"
+          } >> "$GITHUB_STEP_SUMMARY"

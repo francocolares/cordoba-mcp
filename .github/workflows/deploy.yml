@@ -59,6 +59,16 @@ jobs:
       # Compila core -> web -> worker (valida el bundle con un deploy --dry-run).
       - run: pnpm build
 
+      # El Worker declara el binding de R2, así que el bucket tiene que existir
+      # antes del deploy. Es idempotente y, con los datos de `data/` ya en el
+      # repo, deja el bucket consistente con el código que se publica. Publicar
+      # datos frescos sigue siendo trabajo del scrape (ver sync-data.yml).
+      - name: Asegurar el bucket de R2 y sus datos
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node apps/worker/scripts/sync-r2.mjs --ensure-bucket
+
       - id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
@@ -113,5 +123,5 @@ jobs:
             echo "- Desplegado: ${URL:-(no informado)}"
             echo "- Verificado: ${SMOKE_URL:-(no verificado)}"
             echo "- MCP: ${SMOKE_URL:+$SMOKE_URL/mcp}"
-            echo "- Datos: en R2 (los sube el workflow de scrape, no este)"
+            echo "- Datos: en R2 (los frescos los sube el workflow de scrape)"
           } >> "$GITHUB_STEP_SUMMARY"

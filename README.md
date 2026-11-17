@@ -349,8 +349,16 @@ pnpm deploy                                     # wrangler deploy (ya no embebe 
 pnpm --filter @cordoba/worker run smoke [url]   # cliente MCP real contra el deploy
 ```
 
-El bucket se crea una sola vez, con R2 activado en la cuenta: lo hace `pnpm bootstrap` (paso 7) o,
-a mano, `pnpm --filter @cordoba/worker exec wrangler r2 bucket create cordoba-mcp-data`.
+**El bucket lo crea la Action**: `sync-r2.mjs --ensure-bucket` lo crea si no existe y no hace nada
+si ya está, y lo corren tanto `sync-data.yml` como el deploy (el Worker declara el binding, así que
+el bucket tiene que existir antes de publicar). Para la primera carga sin esperar el cron: Actions →
+**sync-data** → _Run workflow_. También lo hace `pnpm bootstrap` (paso 7), o a mano con
+`pnpm --filter @cordoba/worker exec wrangler r2 bucket create cordoba-mcp-data`.
+
+Requisitos de permisos: el token del environment `prod` necesita `Workers R2 Storage: Edit` (crear
+el bucket y subir objetos van por la API de Cloudflare con ese mismo token). Y la cuenta tiene que
+tener **R2 activado** una vez desde el dashboard: eso no lo arregla ningún permiso, y el script
+distingue los dos errores en su salida.
 
 ### Elegir en qué cuenta de Cloudflare se despliega
 
@@ -414,20 +422,29 @@ dispara a mano (`workflow_dispatch` con `ingest: true`): valida, geocodifica lo 
 `data/farmacias/` y llama al deploy. El paso de geocoding es `continue-on-error`: si Nominatim nos
 limita a mitad de camino, lo resuelto se commitea igual y el próximo run retoma.
 
-`.github/workflows/deploy.yml` corre lint + tests + build y publica el Worker con
-`cloudflare/wrangler-action`, y después verifica `/health` y las tools contra la URL desplegada.
-Se dispara con un push a `main`, a mano, o llamado por el scraper cuando dejó datos nuevos (los
-push hechos con `GITHUB_TOKEN` no disparan workflows, así que el scrape invoca el deploy como
-workflow reutilizable).
+`.github/workflows/sync-data.yml` sube `data/` a R2, que es **lo que publica un dato nuevo**: el
+Worker lo lee de ahí, así que no hace falta desplegar nada. Lo llaman los dos workflows de scrape
+cuando commitearon datos (los push con `GITHUB_TOKEN` no disparan workflows, así que lo invocan como
+workflow reutilizable) y también se corre a mano desde Actions → _Run workflow_, que es la forma de
+hacer la primera carga. Después verifica contra `/health` que las colecciones estén disponibles,
+reintentando 2 minutos: el manifest se cachea 60 s por isolate.
+
+`.github/workflows/deploy.yml` corre lint + tests + build, asegura el bucket de R2, publica el
+Worker con `cloudflare/wrangler-action` y verifica `/health` y las tools contra la URL desplegada.
+Se dispara con un push a `main` o a mano. **No** se dispara por cambios en `data/`: el deploy es
+sólo para código.
 
 Las credenciales viven en el **environment `prod`** del repo
 (Settings → Environments → `prod` → _Environment secrets_), no como secrets del repositorio: el
 job `deploy` declara `environment: prod` y es el único que las ve.
 
-| Secret                  | Para qué                                                                         |
-| ----------------------- | -------------------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | token con permiso **Workers Scripts: Edit** (y Workers KV si lo agregás después) |
-| `CLOUDFLARE_ACCOUNT_ID` | el account id de tu cuenta de Cloudflare                                         |
+| Secret                  | Para qué                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | permisos **Workers Scripts: Edit** (deploy) y **Workers R2 Storage: Edit** (datos) |
+| `CLOUDFLARE_ACCOUNT_ID` | el account id de tu cuenta de Cloudflare                                           |
+
+Sin `Workers R2 Storage: Edit` el deploy falla al asegurar el bucket y el scrape diario falla al
+publicar: el server queda en pie, pero sirviendo los datos que ya estaban en R2.
 
 Con dominio propio el token necesita además, **acotado a la zona `cordobamcp.com`**:
 `Zone → Workers Routes: Edit` y `Zone → Zone: Read`. La plantilla _Edit Cloudflare Workers_ ya los

@@ -198,47 +198,11 @@ jobs:
             echo "- Commiteado: ${{ steps.commit.outputs.changed }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Los datos viven en R2, no en el bundle del Worker: subirlos es lo que los
-  # publica. Por eso acá no se llama al deploy, que ahora es sólo para código.
+  # Subir a R2 es lo que publica el dato: el Worker lo lee de ahí, así que esto
+  # no necesita un deploy. Los push con GITHUB_TOKEN no disparan workflows, por
+  # eso se llama explícitamente.
   publicar:
     needs: ingest
     if: needs.ingest.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    # CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID salen de este environment.
-    environment: prod
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        # El job anterior commiteó y pusheó: hay que traer ese commit, no el que
-        # disparó el workflow.
-        with:
-          ref: main
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Subir los datos a R2
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node apps/worker/scripts/sync-r2.mjs
-      - name: Verificar que el MCP ya sirve el dato nuevo
-        env:
-          PROD_URL: ${{ vars.PROD_URL }}
-        run: |
-          set -euo pipefail
-          BASE="${PROD_URL:-https://cordobamcp.com}"
-          case "$BASE" in http://*|https://*) ;; *) BASE="https://$BASE" ;; esac
-          # El manifest se cachea 60s por isolate: reintentamos un rato.
-          for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "$BASE/health" | jq -e '.data_source.error == null and (.collections | all(.available))' > /dev/null; then
-              echo "$BASE sirviendo datos de R2 (intento $i)"
-              exit 0
-            fi
-            echo "intento $i: todavía no; reintento en 15s"
-            sleep 15
-          done
-          echo "::error::$BASE no está sirviendo los datos de R2"
-          exit 1
+    uses: ./.github/workflows/sync-data.yml
+    secrets: inherit
