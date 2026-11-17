@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "cordoba-mcp": {
-      "command": "node",
-      "args": ["apps/mcp/dist/index.js"],
-      "env": {
-        "AGENDA_DATA_PATH": "data/events.jsonl"
-      }
+      "type": "http",
+      "url": "https://cordobamcp.com/mcp"
     }
   }
 }

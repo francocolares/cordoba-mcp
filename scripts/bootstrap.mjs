@@ -339,7 +339,7 @@ if (deploymentUrl) {
     `  (o, sin dominio: claude mcp add --transport http cordoba-mcp ${deploymentUrl}/mcp)`,
   );
 }
-console.log("  MCP local:   ya configurado en .mcp.json (requiere `pnpm build`)");
+console.log("  MCP:         ya configurado en .mcp.json (http, sin instalar nada)");
 console.log("  Scrapeo:     node apps/scraper/dist/index.js run");
 console.log("  Automático:  Actions `scrape-agenda` (diaria) y `deploy-cloudflare`");
 if (notes.length > 0) {

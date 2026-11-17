@@ -25,38 +25,51 @@ const rpc = async (body: unknown) => {
 };
 
 describe("rutas del Worker", () => {
-  it("/health informa los eventos embebidos", async () => {
+  it("/health se arma iterando el catálogo", async () => {
     const res = await call("/health");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body).toMatchObject({ ok: true, events: EVENTS.length });
-    expect(body["data_as_of"]).toBeTruthy();
-  });
-
-  it("/health informa las dos fuentes embebidas", async () => {
-    const body = (await (await call("/health")).json()) as {
-      sources: { agenda: { events: number }; farmacias: { pharmacies: number } | null };
+    const body = (await res.json()) as {
+      ok: boolean;
+      collections: { id: string; available: boolean; records?: number; data_as_of?: string }[];
     };
-    expect(body.sources.agenda.events).toBe(EVENTS.length);
-    if (PHARMACIES.length > 0) {
-      expect(body.sources.farmacias?.pharmacies).toBe(PHARMACIES.length);
-    } else {
-      expect(body.sources.farmacias).toBeNull();
-    }
+    expect(body.ok).toBe(true);
+    expect(body.collections.map((c) => c.id)).toEqual(["eventos", "farmacias_turno"]);
+
+    const eventos = body.collections.find((c) => c.id === "eventos")!;
+    expect(eventos.records).toBe(EVENTS.length);
+    expect(eventos.data_as_of).toBeTruthy();
+
+    const farmacias = body.collections.find((c) => c.id === "farmacias_turno")!;
+    if (PHARMACIES.length > 0) expect(farmacias.records).toBe(PHARMACIES.length);
+    else expect(farmacias.available).toBe(false);
   });
 
-  it("sirve las farmacias y el turnero como datos crudos", async () => {
-    const jsonl = await call("/api/farmacias.jsonl");
+  it("sirve cada colección como datos crudos, por su id", async () => {
+    const jsonl = await call("/api/farmacias_turno.jsonl");
     expect(jsonl.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (await jsonl.text()).trim().split("\n").filter(Boolean);
     expect(lines).toHaveLength(PHARMACIES.length);
 
-    const turnos = (await (await call("/api/farmacias/turnos.json")).json()) as {
+    const turnos = (await (await call("/api/farmacias_turno/turnos.json")).json()) as {
       calendars: unknown[];
     };
     expect(turnos.calendars).toHaveLength(TURNO_CALENDARS.length);
 
-    expect((await call("/api/farmacias/status.json")).status).toBe(200);
+    expect((await call("/api/farmacias_turno/status.json")).status).toBe(200);
+  });
+
+  it("mantiene las rutas anteriores como alias", async () => {
+    for (const [viejo, esperado] of [
+      ["/api/events.jsonl", "application/x-ndjson"],
+      ["/api/farmacias.jsonl", "application/x-ndjson"],
+      ["/api/status.json", "application/json"],
+      ["/api/farmacias/status.json", "application/json"],
+      ["/api/farmacias/turnos.json", "application/json"],
+    ] as const) {
+      const res = await call(viejo);
+      expect(res.status, viejo).toBe(200);
+      expect(res.headers.get("content-type"), viejo).toContain(esperado);
+    }
   });
 
   it("delega al binding de assets lo que no es /mcp ni /api", async () => {
@@ -65,8 +78,8 @@ describe("rutas del Worker", () => {
     expect(await (await call("/no-existe")).text()).toBe("assets:/no-existe");
   });
 
-  it("expone los datos crudos", async () => {
-    const res = await call("/api/events.jsonl");
+  it("expone los eventos crudos", async () => {
+    const res = await call("/api/eventos.jsonl");
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (await res.text()).trim().split("\n");
     expect(lines).toHaveLength(EVENTS.length);
@@ -79,10 +92,13 @@ describe("rutas del Worker", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 
-  it("GET /mcp avisa que sólo acepta POST", async () => {
-    const res = await call("/mcp");
-    expect(res.status).toBe(405);
-    expect(res.headers.get("allow")).toContain("POST");
+  it("GET /mcp avisa que sólo acepta POST, también pidiendo SSE", async () => {
+    for (const init of [undefined, { headers: { accept: "text/event-stream" } }]) {
+      const res = await call("/mcp", init);
+      expect(res.status).toBe(405);
+      expect(res.headers.get("allow")).toContain("POST");
+      expect(res.headers.get("allow")).not.toContain("GET");
+    }
   });
 
   it("DELETE /mcp cierra sin estado", async () => {
@@ -103,9 +119,15 @@ describe("JSON-RPC del MCP", () => {
       result: {
         protocolVersion: "2025-03-26",
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "cordoba-mcp" },
+        serverInfo: { name: "cordoba-mcp", title: "Córdoba MCP" },
       },
     });
+    const { result } = json as { result: { instructions: string } };
+    // Viaja en el handshake y queda pegada a la sesión: no puede nombrar
+    // fuentes concretas, o cada fuente nueva la dejaría mintiendo.
+    expect(result.instructions).toContain("unificada y estandarizada");
+    expect(result.instructions).toContain("list_collections");
+    expect(result.instructions).not.toMatch(/Municipalidad|Colegio de Farmac/);
   });
 
   it("las notificaciones no llevan respuesta (202)", async () => {
@@ -114,50 +136,58 @@ describe("JSON-RPC del MCP", () => {
     expect(json).toBeNull();
   });
 
-  it("tools/list devuelve las tools de las dos fuentes con JSON Schema", async () => {
+  it("tools/list devuelve las cuatro tools con JSON Schema", async () => {
     const { json } = (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" })) as {
       json: { result: { tools: { name: string; inputSchema: Record<string, unknown> }[] } };
     };
     const tools = json.result.tools;
     expect(tools.map((t) => t.name)).toEqual([
-      "search_events",
-      "events_on",
-      "this_weekend",
-      "get_event",
-      "list_categories",
+      "list_collections",
+      "search",
+      "get",
       "source_status",
-      "pharmacies_on_duty",
-      "pharmacies_near",
-      "duty_turno_on",
-      "find_pharmacy",
-      "get_pharmacy",
     ]);
-    const search = tools[0]!.inputSchema as { properties: Record<string, unknown> };
-    expect(Object.keys(search.properties)).toContain("free_only");
+    const search = tools[1]!.inputSchema as {
+      properties: Record<string, Record<string, unknown>>;
+      required: string[];
+    };
+    expect(Object.keys(search.properties)).toEqual(
+      expect.arrayContaining(["collection", "query", "date", "near", "filters", "limit", "cursor"]),
+    );
+    expect(search.required).toEqual(["collection"]);
+    // `filters` tiene que quedar abierto: es lo que permite que una colección
+    // nueva traiga sus propios filtros sin republicar el schema.
+    expect(search.properties["filters"]!["additionalProperties"]).not.toBe(false);
   });
 
-  it("tools/call devuelve el envelope con la fuente", async () => {
+  it("tools/call devuelve el envelope con la fuente y el catálogo", async () => {
     const { json } = (await rpc({
       jsonrpc: "2.0",
       id: 3,
       method: "tools/call",
-      params: { name: "this_weekend", arguments: { free_only: true } },
+      params: {
+        name: "search",
+        arguments: { collection: "eventos", date: { from: "fin_de_semana" } },
+      },
     })) as { json: { result: { content: { text: string }[] } } };
     const payload = JSON.parse(json.result.content[0]!.text);
-    expect(payload.source).toContain("Municipalidad de Córdoba");
+    expect(payload.collection).toBe("eventos");
+    expect(payload.sources[0].name).toContain("Municipalidad de Córdoba");
     expect(payload.timezone).toBe("America/Argentina/Cordoba");
-    expect(payload.range.from).toMatch(/T18:00:00-03:00$/);
-    expect(Array.isArray(payload.events)).toBe(true);
+    expect(payload.catalog_version).toEqual(expect.any(String));
+    expect(payload.resolved.from).toMatch(/T18:00:00-03:00$/);
+    expect(Array.isArray(payload.items)).toBe(true);
   });
 
-  it("get_event inexistente marca isError sin romper el protocolo", async () => {
+  it("un id inexistente marca isError sin romper el protocolo", async () => {
     const { json } = (await rpc({
       jsonrpc: "2.0",
       id: 4,
       method: "tools/call",
-      params: { name: "get_event", arguments: { id: "nope" } },
-    })) as { json: { result: { isError: boolean } } };
+      params: { name: "get", arguments: { ids: ["eventos:turismo_muni:nope"] } },
+    })) as { json: { result: { isError: boolean; content: { text: string }[] } } };
     expect(json.result.isError).toBe(true);
+    expect(JSON.parse(json.result.content[0]!.text).error.code).toBe("not_found");
   });
 
   it("valida los argumentos con zod", async () => {
@@ -165,7 +195,7 @@ describe("JSON-RPC del MCP", () => {
       jsonrpc: "2.0",
       id: 5,
       method: "tools/call",
-      params: { name: "search_events", arguments: { limit: 999 } },
+      params: { name: "search", arguments: { collection: "eventos", limit: 999 } },
     })) as { json: { error: { code: number } } };
     expect(json.error.code).toBe(-32602);
   });
@@ -185,33 +215,34 @@ describe("JSON-RPC del MCP", () => {
     expect(unknownMethod.json.error.code).toBe(-32601);
   });
 
-  it("lee el resource de status y lista los disponibles", async () => {
+  it("expone un único resource de URI fija: el catálogo", async () => {
     const list = (await rpc({ jsonrpc: "2.0", id: 8, method: "resources/list" })) as {
       json: { result: { resources: { uri: string }[] } };
     };
-    expect(list.json.result.resources[0]?.uri).toBe("agenda://status");
+    // La lista no crece con el catálogo: lo que crece es el contenido. Si
+    // creciera la lista, volvería el problema de la caché de resources/list.
+    expect(list.json.result.resources).toHaveLength(1);
+    expect(list.json.result.resources[0]?.uri).toBe("cordoba://catalog");
 
     const read = (await rpc({
       jsonrpc: "2.0",
       id: 9,
       method: "resources/read",
-      params: { uri: "agenda://status" },
+      params: { uri: "cordoba://catalog" },
     })) as { json: { result: { contents: { text: string }[] } } };
-    const status = JSON.parse(read.json.result.contents[0]!.text);
-    /*
-     * `validation` puede venir en null: el workflow valida en un paso y
-     * scrapea en otro, así que el status queda sin el resultado. Lo que el
-     * resource tiene que garantizar es la forma, no el veredicto del día.
-     */
-    expect(status.agenda.status.counts.total).toBeGreaterThan(0);
-    expect(status.agenda.data_as_of).toBeTruthy();
-    expect(status.farmacias).toBeTruthy();
+    const catalog = JSON.parse(read.json.result.contents[0]!.text);
+    expect(catalog.catalog_version).toEqual(expect.any(String));
+    expect(catalog.collections.map((c: { id: string }) => c.id)).toEqual([
+      "eventos",
+      "farmacias_turno",
+    ]);
+    expect(catalog.collections[0].sources[0].name).toBeTruthy();
 
     const missing = (await rpc({
       jsonrpc: "2.0",
       id: 10,
       method: "resources/read",
-      params: { uri: "agenda://otro" },
+      params: { uri: "cordoba://otro" },
     })) as { json: { error: { code: number } } };
     expect(missing.json.error.code).toBe(-32602);
   });

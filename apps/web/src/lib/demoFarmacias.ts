@@ -2,7 +2,7 @@
  * Selección y formato de las farmacias de turno que muestra la demo.
  *
  * Corre en los dos lados: en el build (con el dataset del repo) y en el
- * navegador (con /api/farmacias.jsonl). Igual que demoEventos, no importa nada
+ * navegador (con /api/farmacias_turno.jsonl). Igual que demoEventos, no importa nada
  * de @cordoba/core para no arrastrar zod al bundle del cliente.
  */
 import type { ItemChat } from "./demoEventos";
@@ -114,7 +114,7 @@ export function elegirGuardia(
   return { dia, turno, items: elegibles.slice(0, 2).map(formatearFarmacia) };
 }
 
-/** Parsea el NDJSON de /api/farmacias.jsonl, salteando líneas rotas. */
+/** Parsea el NDJSON de /api/farmacias_turno.jsonl, salteando líneas rotas. */
 export function parsearFarmacias(texto: string): FarmaciaCruda[] {
   const farmacias: FarmaciaCruda[] = [];
   for (const linea of texto.split("\n")) {

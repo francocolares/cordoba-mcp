@@ -8,14 +8,17 @@
  * `../package.json` apunta al mismo archivo en dev (tsx/vitest) y en build (tsc,
  * esbuild/wrangler).
  */
+
 import pkg from "../package.json" with { type: "json" };
+import { SERVER_TITLE } from "./branding.js";
 
 export const SERVER_NAME = "cordoba-mcp" as const;
 
 export const SERVER_VERSION: string = pkg.version;
 
 /** Lo que va en `serverInfo` del `initialize`. */
-export const SERVER_INFO: { name: string; version: string } = {
+export const SERVER_INFO: { name: string; title: string; version: string } = {
   name: SERVER_NAME,
+  title: SERVER_TITLE,
   version: SERVER_VERSION,
 };

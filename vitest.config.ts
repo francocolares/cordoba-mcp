@@ -5,12 +5,12 @@ import { defineConfig } from "vitest/config";
 
 const src = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// El SDK de MCP no es dependencia de la raíz (vive en apps/mcp y apps/worker),
-// así que los tests de tests/ no lo resolverían por nombre. Resolvemos la
-// carpeta real del build ESM desde el contexto de apps/mcp, pasando por el mapa
+// El SDK de MCP no es dependencia de la raíz (vive en apps/worker), así que
+// los tests de tests/ no lo resolverían por nombre. Resolvemos la carpeta real
+// del build ESM desde el contexto de apps/worker, pasando por el mapa
 // de `exports` del paquete: así no hardcodeamos la estructura interna (dist/esm)
 // ni el layout de node_modules que arme pnpm.
-const requireFromMcp = createRequire(src("./apps/mcp/package.json"));
+const requireFromMcp = createRequire(src("./apps/worker/package.json"));
 const sdkEsmDir = dirname(
   dirname(requireFromMcp.resolve("@modelcontextprotocol/sdk/client/index.js")),
 );

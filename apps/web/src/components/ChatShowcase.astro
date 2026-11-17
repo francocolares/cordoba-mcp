@@ -234,7 +234,7 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
     const lista = document.querySelector<HTMLElement>('[data-items="agenda"]');
     if (!lista) return;
 
-    const texto = await bajar("/api/events.jsonl", "application/x-ndjson");
+    const texto = await bajar("/api/eventos.jsonl", "application/x-ndjson");
     if (!texto) return;
 
     const items = elegirEventos(parsearJsonl(texto)).map(formatearEvento);
@@ -282,8 +282,8 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
     if (!lista) return;
 
     const [crudas, turnos] = await Promise.all([
-      bajar("/api/farmacias.jsonl", "application/x-ndjson"),
-      bajar("/api/farmacias/turnos.json", "application/json"),
+      bajar("/api/farmacias_turno.jsonl", "application/x-ndjson"),
+      bajar("/api/farmacias_turno/turnos.json", "application/json"),
     ]);
     if (!crudas || !turnos) return;
 

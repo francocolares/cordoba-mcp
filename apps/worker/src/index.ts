@@ -1,10 +1,12 @@
 /**
  * Worker de Cloudflare: sirve la landing estática de Astro y expone el MCP en
- * /mcp. Los eventos viajan embebidos en el bundle (ver scripts/embed-data.mjs),
+ * /mcp. Los datasets viajan embebidos en el bundle (ver scripts/embed-data.mjs),
  * así que no hay KV, D1 ni fetch externo en el camino crítico.
+ *
+ * Las rutas de datos (`/health`, `/api/*`) se arman iterando el catálogo de
+ * core: una colección nueva aparece sola, sin tocar este archivo.
  */
-import type { Snapshot } from "@cordoba/core/web";
-import { FARMACIAS_SOURCE_NAME, SOURCE_NAME, TURNO_WINDOW_INFO } from "@cordoba/core/web";
+import { COLLECTIONS, findCollection, type Snapshot } from "@cordoba/core/web";
 import {
   DATA_AS_OF,
   EMBEDDED_AT,
@@ -21,20 +23,16 @@ import {
   newSessionId,
   PROTOCOL_VERSION,
   SERVER_INFO,
-  TOOLS_REVISION,
 } from "./mcp.js";
-import { resolveTtlS, sseResponse } from "./sse.js";
 
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
-  /** Vida del stream SSE en segundos; también la latencia máxima del aviso. */
-  MCP_SSE_TTL_S?: string | undefined;
 }
 
+/** Un store por colección. `null` = la fuente no vino en este deploy. */
 const snapshot: Snapshot = {
-  agenda: { events: EVENTS, status: STATUS, data_as_of: DATA_AS_OF },
-  // Sin farmacias embebidas el dataset queda en null y los tools lo reportan.
-  farmacias:
+  eventos: { events: EVENTS, status: STATUS, data_as_of: DATA_AS_OF },
+  farmacias_turno:
     PHARMACIES.length === 0
       ? null
       : {
@@ -78,26 +76,27 @@ const ndjson = (rows: unknown[]) =>
     },
   });
 
-async function handleMcp(request: Request, env: Env): Promise<Response> {
+/** Store de una colección, o null si no está cargada. */
+function storeOf(id: string): unknown {
+  return snapshot[id] ?? null;
+}
+
+async function handleMcp(request: Request): Promise<Response> {
   if (request.method === "DELETE") {
-    // Cierre de sesión: no hay registro de sesiones, así que no hay nada que
-    // limpiar. El stream SSE del cliente muere solo por TTL.
+    // Cierre de sesión: no hay registro de sesiones, así que no hay nada que limpiar.
     return new Response(null, { status: 204, headers: CORS });
   }
   if (request.method === "GET") {
-    // Canal server->client. Sólo con Accept: text/event-stream; el 405 es la
-    // forma que la spec le da al server para decir "acá no hay SSE", y el SDK
-    // lo trata como caso esperado.
-    if ((request.headers.get("accept") ?? "").includes("text/event-stream")) {
-      return sseResponse(request, CORS, { ttlS: resolveTtlS(env.MCP_SSE_TTL_S) });
-    }
+    // No hay canal server->client: la superficie de tools está congelada, así
+    // que no hay notificaciones que entregar. La spec contempla este 405 y el
+    // SDK lo trata como caso esperado.
     return json(
       {
-        error: "Este endpoint acepta POST, o GET con Accept: text/event-stream.",
+        error: "Este endpoint acepta POST. No hay stream SSE: la lista de tools no cambia.",
         server: SERVER_INFO,
         protocolVersion: PROTOCOL_VERSION,
       },
-      { status: 405, headers: { allow: "POST, GET, DELETE, OPTIONS" } },
+      { status: 405, headers: { allow: "POST, DELETE, OPTIONS" } },
     );
   }
   if (request.method !== "POST") {
@@ -116,13 +115,48 @@ async function handleMcp(request: Request, env: Env): Promise<Response> {
 
   const response = handleMcpPayload(snapshot, payload);
   if (response === null) return new Response(null, { status: 202, headers: CORS });
-  // El id de sesión se emite sólo en el initialize, y lleva adentro la revisión
-  // de tools: es lo que después permite detectar un cliente con la lista vieja.
   const sessionHeaders: Record<string, string> = containsInitialize(payload)
     ? { "mcp-session-id": newSessionId() }
     : {};
   return json(response, { headers: { "cache-control": "no-store", ...sessionHeaders } });
 }
+
+/** `/api/{collection}.jsonl`, `/api/{collection}/status.json` y los extras. */
+function handleApi(path: string): Response | null {
+  const rest = path.slice("/api/".length);
+  if (rest === "") return null;
+
+  const jsonlMatch = /^([a-z_]+)\.jsonl$/.exec(rest);
+  if (jsonlMatch) {
+    const id = jsonlMatch[1] as string;
+    if (!COLLECTIONS.some((c) => c.descriptor.id === id)) return null;
+    const store = storeOf(id);
+    return ndjson(store === null ? [] : findCollection(id).dump(store).jsonl);
+  }
+
+  const parts = rest.split("/");
+  if (parts.length !== 2) return null;
+  const [id, file] = parts as [string, string];
+  if (!COLLECTIONS.some((c) => c.descriptor.id === id)) return null;
+  const collection = findCollection(id);
+  const store = storeOf(id);
+  if (store === null) return json({ error: `La colección ${id} no está cargada` }, { status: 404 });
+  if (file === "status.json") return json(collection.status(store));
+  const extra = collection.dump(store).extras?.[file];
+  return extra === undefined ? null : json(extra);
+}
+
+/**
+ * Rutas anteriores al catálogo genérico. Se mantienen porque son URLs públicas
+ * y no sabemos quién las consume fuera del MCP.
+ */
+const LEGACY_API: Record<string, string> = {
+  "/api/events.jsonl": "/api/eventos.jsonl",
+  "/api/status.json": "/api/eventos/status.json",
+  "/api/farmacias.jsonl": "/api/farmacias_turno.jsonl",
+  "/api/farmacias/status.json": "/api/farmacias_turno/status.json",
+  "/api/farmacias/turnos.json": "/api/farmacias_turno/turnos.json",
+};
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -133,60 +167,31 @@ export default {
     }
 
     if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
-      return handleMcp(request, env);
+      return handleMcp(request);
     }
 
     if (url.pathname === "/health") {
       return json({
         ok: true,
         server: SERVER_INFO,
-        tools_revision: TOOLS_REVISION,
         embedded_at: EMBEDDED_AT,
-        sources: {
-          agenda: {
-            source: SOURCE_NAME,
-            events: snapshot.agenda.events.length,
-            active: snapshot.agenda.events.filter((e) => e.active).length,
-            data_as_of: snapshot.agenda.data_as_of,
-            validation: snapshot.agenda.status?.validation?.status ?? null,
-          },
-          farmacias: snapshot.farmacias
-            ? {
-                source: FARMACIAS_SOURCE_NAME,
-                pharmacies: snapshot.farmacias.pharmacies.length,
-                active: snapshot.farmacias.pharmacies.filter((p) => p.active).length,
-                geocoded: snapshot.farmacias.pharmacies.filter((p) => p.lat !== null).length,
-                years: snapshot.farmacias.calendars.map((c) => c.year),
-                data_as_of: snapshot.farmacias.data_as_of,
-                validation: snapshot.farmacias.status?.validation?.status ?? null,
-                turno_window: TURNO_WINDOW_INFO,
-              }
-            : null,
-        },
-        // Compatibilidad con la versión anterior de /health.
-        source: SOURCE_NAME,
-        events: snapshot.agenda.events.length,
-        active: snapshot.agenda.events.filter((e) => e.active).length,
-        data_as_of: snapshot.agenda.data_as_of,
-        validation: snapshot.agenda.status?.validation?.status ?? null,
+        collections: COLLECTIONS.map((collection) => {
+          const id = collection.descriptor.id;
+          const store = storeOf(id);
+          return {
+            id,
+            title: collection.descriptor.title,
+            available: store !== null,
+            ...(store === null ? {} : collection.status(store)),
+          };
+        }),
       });
     }
 
-    // Los datos crudos, para quien quiera consumirlos sin MCP.
-    if (url.pathname === "/api/events.jsonl") {
-      return ndjson(snapshot.agenda.events);
-    }
-    if (url.pathname === "/api/status.json") {
-      return json(snapshot.agenda.status ?? { error: "sin status" });
-    }
-    if (url.pathname === "/api/farmacias.jsonl") {
-      return ndjson(snapshot.farmacias?.pharmacies ?? []);
-    }
-    if (url.pathname === "/api/farmacias/turnos.json") {
-      return json({ calendars: snapshot.farmacias?.calendars ?? [] });
-    }
-    if (url.pathname === "/api/farmacias/status.json") {
-      return json(snapshot.farmacias?.status ?? { error: "sin status" });
+    const path = LEGACY_API[url.pathname] ?? url.pathname;
+    if (path.startsWith("/api/")) {
+      const response = handleApi(path);
+      if (response) return response;
     }
 
     return env.ASSETS.fetch(request);

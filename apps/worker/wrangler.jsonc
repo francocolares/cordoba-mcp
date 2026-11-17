@@ -17,13 +17,6 @@
   // `workers.dev` queda activo a propósito: la Action usa esa URL para el smoke
   // test inmediato, sin esperar la propagación del dominio.
   "routes": [{ "pattern": "cordobamcp.com", "custom_domain": true }],
-  // Vida del stream SSE del GET /mcp. Es la latencia máxima con la que un
-  // cliente conectado se entera de que cambiaron las tools, y a la vez lo que
-  // acota los streams huérfanos (Cloudflare no avisa cuando el cliente se va).
-  // Más bajo = avisos más rápidos y más reconexiones; más alto = al revés.
-  "vars": {
-    "MCP_SSE_TTL_S": "60"
-  },
   "observability": {
     "enabled": true
   }

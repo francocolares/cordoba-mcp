@@ -2,7 +2,7 @@
  * Selección y formato de los eventos que muestra la demo.
  *
  * Corre en los dos lados: en el build (con el dataset del repo) y en el
- * navegador (con lo que devuelve /api/events.jsonl). Por eso no importa nada
+ * navegador (con lo que devuelve /api/eventos.jsonl). Por eso no importa nada
  * de @cordoba/core: el barrel arrastraría zod y compañía al bundle del cliente.
  */
 
@@ -87,7 +87,7 @@ export function formatearEvento(e: EventoCrudo): ItemChat {
   };
 }
 
-/** Parsea el NDJSON de /api/events.jsonl, salteando líneas rotas. */
+/** Parsea el NDJSON de /api/eventos.jsonl, salteando líneas rotas. */
 export function parsearJsonl(texto: string): EventoCrudo[] {
   const eventos: EventoCrudo[] = [];
   for (const linea of texto.split("\n")) {

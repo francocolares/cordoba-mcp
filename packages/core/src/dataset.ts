@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
+import type { EventosStore } from "./collections/eventos.js";
+import type { FarmaciasTurnoStore } from "./collections/farmaciasTurno.js";
 import type { FarmaciasStatus } from "./farmacias/models.js";
 import { TurnoCalendarsSchema } from "./farmacias/models.js";
 import { parsePharmaciesJsonl } from "./farmacias/store.js";
 import type { RunStatus } from "./models.js";
 import { dataPaths, parseEventsJsonl } from "./store.js";
-import type { AgendaDataset, FarmaciasDataset, Snapshot } from "./tools.js";
 
-export interface Dataset extends AgendaDataset {
+export interface Dataset extends EventosStore {
   loaded_at: number;
 }
 
@@ -66,7 +67,7 @@ export function farmaciasBase(eventsTarget: string): string {
 
 export async function loadFarmaciasDataset(
   options: DatasetOptions = {},
-): Promise<FarmaciasDataset | null> {
+): Promise<FarmaciasTurnoStore | null> {
   const url = options.url;
   const isUrl = Boolean(url);
   const base = farmaciasBase(url ?? options.path ?? dataPaths().events);
@@ -92,56 +93,4 @@ export async function loadFarmaciasDataset(
     status,
     data_as_of: status?.last_run ?? latestSeen ?? new Date().toISOString(),
   };
-}
-
-export interface LoadedSnapshot extends Snapshot {
-  loaded_at: number;
-}
-
-/** Las dos fuentes juntas: es lo que consumen los tools. */
-export async function loadSnapshot(options: DatasetOptions = {}): Promise<LoadedSnapshot> {
-  const [agenda, farmacias] = await Promise.all([
-    loadDataset(options),
-    loadFarmaciasDataset(options),
-  ]);
-  return { agenda, farmacias, loaded_at: Date.now() };
-}
-
-/** Cache en memoria con TTL (default 10 minutos). */
-export class DatasetCache {
-  private cached: Dataset | null = null;
-  private readonly ttlMs: number;
-
-  constructor(private readonly options: DatasetOptions = {}) {
-    this.ttlMs = options.ttlMs ?? 10 * 60 * 1000;
-  }
-
-  async get(): Promise<Dataset> {
-    if (this.cached && Date.now() - this.cached.loaded_at < this.ttlMs) return this.cached;
-    this.cached = await loadDataset(this.options);
-    return this.cached;
-  }
-
-  invalidate(): void {
-    this.cached = null;
-  }
-}
-
-export class SnapshotCache {
-  private cached: LoadedSnapshot | null = null;
-  private readonly ttlMs: number;
-
-  constructor(private readonly options: DatasetOptions = {}) {
-    this.ttlMs = options.ttlMs ?? 10 * 60 * 1000;
-  }
-
-  async get(): Promise<LoadedSnapshot> {
-    if (this.cached && Date.now() - this.cached.loaded_at < this.ttlMs) return this.cached;
-    this.cached = await loadSnapshot(this.options);
-    return this.cached;
-  }
-
-  invalidate(): void {
-    this.cached = null;
-  }
 }

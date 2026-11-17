@@ -1,69 +1,41 @@
-import { z } from "zod";
-import { AGENDA_URL, SOURCE_NAME, TZ } from "./config.js";
-import { isoDate, resolveDateInput, todayInCordoba } from "./datetime.js";
-import {
-  FARMACIAS_DISCLAIMER,
-  FARMACIAS_SOURCE_NAME,
-  FARMACIAS_SOURCE_URL,
-  TURNO_DURATION_HOURS,
-  TURNO_START,
-  TURNO_WINDOW_CONFIRMED,
-} from "./farmacias/config.js";
-import type { FarmaciasStatus, Pharmacy, TurnoCalendar } from "./farmacias/models.js";
-import {
-  findPharmacies,
-  getPharmacy,
-  matchesBarrio,
-  nearest,
-  nextDutyDates,
-  pharmaciesOfTurno,
-  resolveServiceDate,
-  toPharmacySummary,
-  turnoOn,
-  turnoWindow,
-} from "./farmacias/query.js";
-import { Category, type Event, type RunStatus } from "./models.js";
-import {
-  eventsOn,
-  getEvent,
-  listCategories,
-  searchEvents,
-  thisWeekend,
-  toSummary,
-} from "./query.js";
-
-/** Dataset de la agenda turística. */
-export interface AgendaDataset {
-  events: Event[];
-  status: RunStatus | null;
-  data_as_of: string;
-}
-
-/** Dataset de las guardias de farmacias. */
-export interface FarmaciasDataset {
-  pharmacies: Pharmacy[];
-  calendars: TurnoCalendar[];
-  status: FarmaciasStatus | null;
-  data_as_of: string;
-}
-
 /**
- * Todo lo que los tools necesitan saber, sin tocar el filesystem. Cada fuente
- * es un dataset aparte: comparten el servidor MCP, no el modelo de datos.
+ * La superficie MCP: cuatro tools, y están congeladas a propósito.
+ *
+ * `list_collections` / `search` / `get` / `source_status` cubren todo el
+ * catálogo. Sumar datos nuevos (una colección, o una fuente más dentro de una
+ * colección existente) es registrar un descriptor en `collections/index.ts`: no
+ * cambia ni el nombre ni el schema de ninguna tool, así que un cliente que ya
+ * tiene `tools/list` cacheado sigue sirviendo sin reconectar.
+ *
+ * El precio de tener `filters` abierto en el schema es que la validación pasa a
+ * runtime (`validateFilters`); a cambio, los errores devuelven los valores
+ * válidos y el modelo se corrige en una llamada.
  */
-export interface Snapshot {
-  agenda: AgendaDataset;
-  /** null cuando el dataset no está cargado (el tool lo reporta como error). */
-  farmacias: FarmaciasDataset | null;
-}
+import { z } from "zod";
+import { SERVER_TAGLINE } from "./branding.js";
+import {
+  CATALOG_VERSION,
+  COLLECTION_IDS,
+  COLLECTIONS,
+  findCollection,
+} from "./collections/index.js";
+import {
+  type Collection,
+  type CollectionDescriptor,
+  type SearchRequest,
+  validateFilters,
+} from "./collections.js";
+import { TZ } from "./config.js";
+import { DataError, isDataError } from "./errors.js";
+import { parseId } from "./ids.js";
 
-/** @deprecated Quedó como alias del dataset de la agenda. */
-export type AgendaSnapshot = AgendaDataset;
-
-export type DatasetId = "agenda" | "farmacias";
+/** Los datos cargados, por colección. `null` = la fuente no está disponible. */
+export type Snapshot = Record<string, unknown | null>;
 
 export interface ToolOutput {
   data: Record<string, unknown>;
+  /** Colección que sirvió la respuesta: define el crédito del envelope. */
+  collection?: string | undefined;
   isError?: boolean;
 }
 
@@ -71,364 +43,378 @@ export interface ToolDef<Shape extends z.ZodRawShape = z.ZodRawShape> {
   name: string;
   title: string;
   description: string;
-  /** De qué fuente sale: define el crédito y el `data_as_of` de la respuesta. */
-  dataset: DatasetId;
   inputShape: Shape;
   handler: (snapshot: Snapshot, args: z.infer<z.ZodObject<Shape>>) => ToolOutput;
 }
 
-export const TURNO_WINDOW_INFO = {
-  start_time: TURNO_START,
-  duration_hours: TURNO_DURATION_HOURS,
-  confirmed: TURNO_WINDOW_CONFIRMED,
-} as const;
+export const DEFAULT_LIMIT = 20;
+export const MAX_LIMIT = 100;
 
-/** Envoltorio común a todas las respuestas, con crédito a la fuente que la sirvió. */
+/* ------------------------------------------------------------ envelope ----- */
+
+function sourcesOf(snapshot: Snapshot, collection: Collection<unknown>) {
+  const store = snapshot[collection.descriptor.id];
+  return store === null || store === undefined ? [] : collection.sources(store);
+}
+
+/**
+ * Envoltorio común a todas las respuestas: siempre la misma forma, con el
+ * crédito a cada fuente y la huella del catálogo.
+ */
 export function envelope(
-  tool: Pick<ToolDef, "dataset">,
   snapshot: Snapshot,
   payload: Record<string, unknown>,
+  collectionId?: string | undefined,
 ): Record<string, unknown> {
-  if (tool.dataset === "farmacias") {
-    return {
-      source: FARMACIAS_SOURCE_NAME,
-      source_url: FARMACIAS_SOURCE_URL,
-      timezone: TZ,
-      data_as_of: snapshot.farmacias?.data_as_of ?? null,
-      turno_window: TURNO_WINDOW_INFO,
-      disclaimer: FARMACIAS_DISCLAIMER,
-      ...payload,
-    };
-  }
+  const involved =
+    collectionId === undefined
+      ? COLLECTIONS
+      : COLLECTIONS.filter((c) => c.descriptor.id === collectionId);
+
+  const sources = involved.flatMap((c) => sourcesOf(snapshot, c));
+  const notes = involved.flatMap((c) => c.descriptor.notes ?? []);
+  const freshest = sources.map((s) => s.data_as_of).filter((v): v is string => v !== null);
+
   return {
-    source: SOURCE_NAME,
-    source_url: AGENDA_URL,
+    service: SERVER_TAGLINE,
+    ...(collectionId === undefined ? {} : { collection: collectionId }),
+    sources,
     timezone: TZ,
-    data_as_of: snapshot.agenda.data_as_of,
+    data_as_of: freshest.length === 0 ? null : freshest.sort().at(-1),
+    catalog_version: CATALOG_VERSION,
+    ...(notes.length === 0 ? {} : { notes }),
     ...payload,
   };
 }
 
-function define<Shape extends z.ZodRawShape>(def: ToolDef<Shape>): ToolDef<z.ZodRawShape> {
-  return def as unknown as ToolDef<z.ZodRawShape>;
+/* ----------------------------------------------------------- paginación ----- */
+
+/** Cursor opaco: es un offset codificado, y se trata como opaco desde afuera. */
+export function encodeCursor(offset: number): string {
+  return btoa(`o:${offset}`).replace(/=+$/, "");
 }
 
-/* ------------------------------------------------------------- agenda ----- */
+export function decodeCursor(cursor: string | undefined): number {
+  if (cursor === undefined) return 0;
+  try {
+    const text = atob(cursor);
+    const match = /^o:(\d+)$/.exec(text);
+    if (!match) throw new Error("formato");
+    return Number(match[1]);
+  } catch {
+    throw new DataError("invalid_cursor", "El cursor no es válido", {
+      hint: "Usá tal cual el next_cursor de la respuesta anterior, o omitilo para empezar de cero.",
+    });
+  }
+}
 
-const searchShape = {
-  query: z.string().optional().describe("texto libre (título, descripción, lugar, organizador)"),
-  category: Category.optional().describe("categoría canónica"),
-  date_from: z.string().optional().describe('aaaa-mm-dd, "hoy" o "mañana"'),
-  date_to: z.string().optional().describe('aaaa-mm-dd, "hoy" o "mañana"'),
-  free_only: z.boolean().optional().default(false),
-  include_past: z.boolean().optional().default(false),
-  limit: z.number().int().min(1).max(100).optional().default(20),
-};
+/* ------------------------------------------------------------- helpers ----- */
 
-const AGENDA_TOOLS: ToolDef<z.ZodRawShape>[] = [
-  define({
-    name: "search_events",
-    title: "Buscar eventos",
-    description:
-      "Busca eventos de la agenda turística de Córdoba por texto, categoría, rango de fechas y si son gratis.",
-    dataset: "agenda",
-    inputShape: searchShape,
+function storeOf(snapshot: Snapshot, collection: Collection<unknown>): unknown {
+  const store = snapshot[collection.descriptor.id];
+  if (store === null || store === undefined) {
+    throw new DataError(
+      "source_unavailable",
+      `La colección "${collection.descriptor.id}" no está disponible en este momento`,
+      { hint: "Probá source_status para ver el estado de cada fuente." },
+    );
+  }
+  return store;
+}
+
+function assertSupported(descriptor: CollectionDescriptor, request: SearchRequest): void {
+  const { supports } = descriptor;
+  if (request.near && !supports.near) {
+    throw new DataError(
+      "unsupported",
+      `La colección "${descriptor.id}" no soporta búsqueda por cercanía`,
+      { hint: `Soporta: ${supports.near ? "near" : "texto y filtros"}.` },
+    );
+  }
+  if (request.query !== undefined && !supports.text) {
+    throw new DataError("unsupported", `La colección "${descriptor.id}" no soporta texto libre`);
+  }
+  if (request.date !== undefined && supports.date === "none") {
+    throw new DataError("unsupported", `La colección "${descriptor.id}" no filtra por fecha`);
+  }
+  if (request.group_by !== undefined && !supports.group_by.includes(request.group_by)) {
+    throw new DataError(
+      "unsupported",
+      `"${request.group_by}" no es una clave de agregación de "${descriptor.id}"`,
+      { valid_values: [...supports.group_by] },
+    );
+  }
+  if (request.sort !== undefined && !supports.sort.includes(request.sort)) {
+    throw new DataError("unsupported", `"${request.sort}" no es un orden de "${descriptor.id}"`, {
+      valid_values: [...supports.sort],
+    });
+  }
+}
+
+function describe(
+  collection: Collection<unknown>,
+  snapshot: Snapshot,
+  include: string[],
+): Record<string, unknown> {
+  const { descriptor } = collection;
+  const store = snapshot[descriptor.id] ?? null;
+  const base: Record<string, unknown> = {
+    id: descriptor.id,
+    title: descriptor.title,
+    description: descriptor.description,
+    record: descriptor.record,
+    available: store !== null,
+    data_as_of: store === null ? null : collection.dataAsOf(store),
+    supports: descriptor.supports,
+    filters: descriptor.filters,
+    ...(descriptor.notes === undefined ? {} : { notes: descriptor.notes }),
+  };
+  if (include.includes("sources"))
+    base["sources"] = store === null ? [] : collection.sources(store);
+  if (include.includes("examples") && descriptor.examples) base["examples"] = descriptor.examples;
+  if (include.includes("taxonomies") && store !== null && collection.taxonomies) {
+    base["taxonomies"] = collection.taxonomies(store);
+  }
+  return base;
+}
+
+/** Envuelve el handler para traducir `DataError` a la forma única de error. */
+function define<Shape extends z.ZodRawShape>(def: ToolDef<Shape>): ToolDef<z.ZodRawShape> {
+  const wrapped: ToolDef<Shape> = {
+    ...def,
     handler: (snapshot, args) => {
-      const found = searchEvents(snapshot.agenda.events, args);
-      return { data: { count: found.length, events: found.map(toSummary) } };
+      try {
+        return def.handler(snapshot, args);
+      } catch (err) {
+        if (isDataError(err)) return { data: { error: err.toPayload() }, isError: true };
+        throw err;
+      }
     },
-  }),
+  };
+  return wrapped as unknown as ToolDef<z.ZodRawShape>;
+}
+
+/* --------------------------------------------------------------- tools ----- */
+
+const INCLUDE_SECTIONS = ["sources", "examples", "taxonomies"] as const;
+
+const dateShape = z
+  .object({
+    from: z.string().optional().describe("aaaa-mm-dd, aaaa-mm-ddThh:mm o un token de la colección"),
+    to: z.string().optional(),
+    include_past: z.boolean().optional().default(false),
+  })
+  .optional();
+
+const nearShape = z
+  .object({
+    lat: z.number().min(-90).max(90),
+    lon: z.number().min(-180).max(180),
+    radius_km: z.number().min(0.1).max(50).optional(),
+  })
+  .optional()
+  .describe("punto de referencia; ordena por distancia y recorta por radio");
+
+export const TOOLS: ToolDef<z.ZodRawShape>[] = [
   define({
-    name: "events_on",
-    title: "Eventos de un día",
+    name: "list_collections",
+    title: "Catálogo de datos",
     description:
-      'Eventos de un día puntual en hora de Córdoba. Acepta "hoy", "mañana" o aaaa-mm-dd.',
-    dataset: "agenda",
-    inputShape: { date: z.string().describe('aaaa-mm-dd, "hoy" o "mañana"') },
-    handler: (snapshot, { date }) => {
-      const found = eventsOn(snapshot.agenda.events, date);
-      return { data: { date, count: found.length, events: found.map(toSummary) } };
-    },
-  }),
-  define({
-    name: "this_weekend",
-    title: "Este fin de semana",
-    description: "Eventos del viernes 18:00 al domingo 23:59 del próximo (o actual) fin de semana.",
-    dataset: "agenda",
+      "Qué datos públicos de Córdoba hay disponibles: colecciones, filtros que acepta cada una, " +
+      "taxonomías, fuentes y frescura. Llamala si no reconocés una colección o un filtro: el " +
+      "catálogo crece sin que cambien las tools.",
     inputShape: {
-      free_only: z.boolean().optional().default(false),
-      category: Category.optional(),
+      collection: z
+        .string()
+        .optional()
+        .describe(`id de colección (${COLLECTION_IDS.join(", ")}); omitilo para listar todas`),
+      include: z
+        .array(z.enum(INCLUDE_SECTIONS))
+        .optional()
+        .describe("secciones extra; filtros, soporte y frescura vienen siempre"),
     },
     handler: (snapshot, args) => {
-      const { range, events } = thisWeekend(snapshot.agenda.events, args);
-      return { data: { range, count: events.length, events: events.map(toSummary) } };
+      const include = (args.include as string[] | undefined) ?? [];
+      const only = args.collection as string | undefined;
+      const list = only === undefined ? COLLECTIONS : [findCollection(only)];
+      return {
+        data: {
+          count: list.length,
+          collections: list.map((c) => describe(c, snapshot, include)),
+        },
+      };
     },
   }),
+
   define({
-    name: "get_event",
-    title: "Detalle de evento",
-    description: "Devuelve un evento completo por id, sin truncar la descripción.",
-    dataset: "agenda",
-    inputShape: { id: z.string().describe("id estable del evento") },
-    handler: (snapshot, { id }) => {
-      const event = getEvent(snapshot.agenda.events, id);
-      if (!event) return { data: { id, error: "No existe un evento con ese id" }, isError: true };
-      // El link ?evento=N no es estable (es el índice de fila), así que linkeamos la agenda.
-      return { data: { event, link: AGENDA_URL } };
+    name: "search",
+    title: "Buscar datos",
+    description:
+      "Busca registros en una colección por texto, fechas, filtros propios de la colección y " +
+      `cercanía a un punto. Colecciones: ${COLLECTION_IDS.join(", ")}. Los filtros válidos de ` +
+      "cada una salen de list_collections, y un filtro desconocido devuelve la lista de válidos.",
+    inputShape: {
+      collection: z.string().describe(`id de colección (${COLLECTION_IDS.join(", ")})`),
+      query: z.string().optional().describe("texto libre"),
+      date: dateShape,
+      near: nearShape,
+      filters: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('filtros de la colección, p. ej. {"category":"musica","free_only":true}'),
+      source: z.string().optional().describe("limita a una fuente; por defecto consulta todas"),
+      group_by: z.string().optional().describe("clave de agregación declarada por la colección"),
+      sort: z.string().optional().describe("clave de orden declarada por la colección"),
+      fields: z.enum(["summary", "full"]).optional().default("summary"),
+      limit: z.number().int().min(1).max(MAX_LIMIT).optional().default(DEFAULT_LIMIT),
+      cursor: z.string().optional().describe("next_cursor de la respuesta anterior"),
+    },
+    handler: (snapshot, args) => {
+      const collection = findCollection(args.collection);
+      const store = storeOf(snapshot, collection);
+      const request: SearchRequest = {
+        query: args.query as string | undefined,
+        date: args.date as SearchRequest["date"],
+        near: args.near as SearchRequest["near"],
+        filters: {},
+        source: args.source as string | undefined,
+        group_by: args.group_by as string | undefined,
+        sort: args.sort as string | undefined,
+        fields: ((args.fields as string | undefined) ?? "summary") as "summary" | "full",
+        now: new Date(),
+      };
+      assertSupported(collection.descriptor, request);
+      request.filters = validateFilters(
+        collection.descriptor,
+        (args.filters as Record<string, unknown> | undefined) ?? {},
+      );
+
+      const outcome = collection.search(store, request);
+      const limit = (args.limit as number | undefined) ?? DEFAULT_LIMIT;
+      const offset = decodeCursor(args.cursor as string | undefined);
+      const page = outcome.rows.slice(offset, offset + limit);
+      const nextOffset = offset + page.length;
+
+      return {
+        collection: collection.descriptor.id,
+        data: {
+          ...(outcome.meta ?? {}),
+          count: page.length,
+          total: outcome.rows.length,
+          truncated: nextOffset < outcome.rows.length,
+          ...(nextOffset < outcome.rows.length ? { next_cursor: encodeCursor(nextOffset) } : {}),
+          ...(outcome.groups === undefined ? {} : { groups: outcome.groups }),
+          items: page,
+        },
+      };
     },
   }),
+
   define({
-    name: "list_categories",
-    title: "Categorías",
-    description: "Categorías canónicas con la cantidad de eventos activos de cada una.",
-    dataset: "agenda",
-    inputShape: {},
-    handler: (snapshot) => ({ data: { categories: listCategories(snapshot.agenda.events) } }),
+    name: "get",
+    title: "Traer registros por id",
+    description:
+      "Trae registros completos por id, sin truncar. El id lleva prefijo de colección y fuente " +
+      "(p. ej. eventos:turismo_muni:9f3c1a2b4d5e), que es lo que devuelve search.",
+    inputShape: {
+      ids: z.array(z.string()).min(1).max(50).describe("ids con prefijo de colección"),
+      expand: z
+        .array(z.string())
+        .optional()
+        .describe("datos derivados declarados por la colección, p. ej. next_duty_dates"),
+    },
+    handler: (snapshot, args) => {
+      const expand = (args.expand as string[] | undefined) ?? [];
+      // Guardamos el id tal como vino: lo que falte se devuelve con la misma
+      // forma en que lo pidieron, no con una reconstruida.
+      const byCollection = new Map<string, { local: string; raw: string }[]>();
+      const unresolved: string[] = [];
+
+      for (const raw of args.ids as string[]) {
+        const parsed = parseId(raw);
+        const id =
+          parsed.collection === null ? resolveBare(snapshot, parsed.local) : parsed.collection;
+        if (id === null) {
+          unresolved.push(raw);
+          continue;
+        }
+        const list = byCollection.get(id) ?? [];
+        list.push({ local: parsed.local, raw });
+        byCollection.set(id, list);
+      }
+
+      const records: Record<string, unknown>[] = [];
+      const missing: string[] = [...unresolved];
+      let single: string | undefined;
+
+      for (const [collectionId, asked] of byCollection) {
+        const collection = findCollection(collectionId);
+        const unknownExpand = expand.filter(
+          (e) => !collection.descriptor.supports.expand.includes(e),
+        );
+        if (unknownExpand.length > 0) {
+          throw new DataError(
+            "unsupported",
+            `"${unknownExpand[0]}" no es un expand de "${collectionId}"`,
+            { valid_values: [...collection.descriptor.supports.expand] },
+          );
+        }
+        const store = storeOf(snapshot, collection);
+        const outcome = collection.get(
+          store,
+          asked.map((item) => item.local),
+          expand,
+        );
+        records.push(...outcome.found);
+        missing.push(
+          ...outcome.missing.map(
+            (local) =>
+              asked.find((item) => item.local === local)?.raw ?? `${collectionId}:${local}`,
+          ),
+        );
+        single = byCollection.size === 1 ? collectionId : undefined;
+      }
+
+      if (records.length === 0) {
+        throw new DataError("not_found", "Ninguno de esos ids existe", {
+          hint: "Los ids salen de search; no son estables si la fuente cambia el título o la fecha.",
+          valid_values: missing,
+        });
+      }
+
+      return {
+        collection: single,
+        data: { count: records.length, records, ...(missing.length === 0 ? {} : { missing }) },
+      };
+    },
   }),
+
   define({
     name: "source_status",
     title: "Estado de las fuentes",
-    description: "Último run de cada fuente, resultado de la validación y conteos.",
-    dataset: "agenda",
-    inputShape: {},
-    handler: (snapshot) => ({
-      data: {
-        agenda: {
-          status: snapshot.agenda.status,
-          events_in_file: snapshot.agenda.events.length,
-          data_as_of: snapshot.agenda.data_as_of,
-        },
-        farmacias: snapshot.farmacias
-          ? {
-              status: snapshot.farmacias.status,
-              pharmacies_in_file: snapshot.farmacias.pharmacies.length,
-              years: snapshot.farmacias.calendars.map((c) => c.year),
-              data_as_of: snapshot.farmacias.data_as_of,
-              turno_window: TURNO_WINDOW_INFO,
-            }
-          : { error: "El dataset de farmacias no está cargado" },
-      },
-    }),
-  }),
-];
-
-/* ---------------------------------------------------------- farmacias ----- */
-
-const NO_DATASET = {
-  data: {
-    error:
-      "El dataset de farmacias no está cargado. Corré `cordoba-scraper farmacias ingest` o revisá AGENDA_DATA_PATH.",
-  },
-  isError: true,
-} satisfies ToolOutput;
-
-const dateArg = z.string().optional().describe('"ahora" (default), "hoy", "mañana" o aaaa-mm-dd');
-
-const latArg = z.number().min(-90).max(90);
-const lonArg = z.number().min(-180).max(180);
-
-/** Resuelve fecha -> turno y lista. Lo comparten los tools de guardia. */
-function dutyFor(
-  farmacias: FarmaciasDataset,
-  dateInput: string | undefined,
-  now = new Date(),
-):
-  | { error: string }
-  | {
-      lookup: NonNullable<ReturnType<typeof turnoOn>>;
-      window: ReturnType<typeof turnoWindow>;
-      pharmacies: Pharmacy[];
-    } {
-  const date = resolveServiceDate(dateInput, now);
-  if (!date) return { error: `No pude interpretar la fecha "${dateInput ?? ""}"` };
-  const lookup = turnoOn(farmacias.calendars, date);
-  if (!lookup) {
-    return {
-      error: `No hay turnero cargado para ${isoDate(date)}. Años disponibles: ${
-        farmacias.calendars.map((c) => c.year).join(", ") || "ninguno"
-      }`,
-    };
-  }
-  return {
-    lookup,
-    window: turnoWindow(date),
-    pharmacies: pharmaciesOfTurno(farmacias.pharmacies, lookup.turno),
-  };
-}
-
-const FARMACIAS_TOOLS: ToolDef<z.ZodRawShape>[] = [
-  define({
-    name: "pharmacies_on_duty",
-    title: "Farmacias de turno",
     description:
-      "Farmacias de turno (guardia obligatoria) en Córdoba para un día. Si se pasan coordenadas, " +
-      "las ordena por distancia. El horario de la guardia es un supuesto declarado en la respuesta.",
-    dataset: "farmacias",
+      "Último run de cada fuente, resultado de la validación, conteos y frescura. Sirve para " +
+      "saber si un dato está al día antes de confiar en él.",
     inputShape: {
-      date: dateArg,
-      barrio: z.string().optional().describe("filtra por barrio o calle"),
-      near_lat: latArg.optional().describe("latitud de referencia para ordenar por distancia"),
-      near_lon: lonArg.optional().describe("longitud de referencia"),
-      limit: z.number().int().min(1).max(200).optional().default(25),
+      collection: z.string().optional().describe("id de colección; omitilo para todas"),
     },
     handler: (snapshot, args) => {
-      const farmacias = snapshot.farmacias;
-      if (!farmacias) return NO_DATASET;
-      const duty = dutyFor(farmacias, args.date as string | undefined);
-      if ("error" in duty) return { data: { error: duty.error }, isError: true };
-
-      const barrio = args.barrio as string | undefined;
-      const filtered = barrio
-        ? duty.pharmacies.filter((p) => matchesBarrio(p, barrio))
-        : duty.pharmacies;
-      const limit = (args.limit as number) ?? 25;
-      const lat = args.near_lat as number | undefined;
-      const lon = args.near_lon as number | undefined;
-
-      const list =
-        lat !== undefined && lon !== undefined
-          ? nearest(filtered, { lat, lon, limit }).map((row) =>
-              toPharmacySummary(row.pharmacy, row.distance_km),
-            )
-          : filtered.slice(0, limit).map((p) => toPharmacySummary(p));
-
+      const only = args.collection as string | undefined;
+      const list = only === undefined ? COLLECTIONS : [findCollection(only)];
       return {
         data: {
-          turno: duty.lookup.turno,
-          turno_derivado_del_ciclo: duty.lookup.derived,
-          service_date: duty.window.service_date,
-          window: { from: duty.window.from, to: duty.window.to },
-          total_del_turno: duty.pharmacies.length,
-          count: list.length,
-          sin_geocodificar:
-            lat !== undefined && lon !== undefined
-              ? filtered.filter((p) => p.lat === null).length
-              : undefined,
-          pharmacies: list,
-        },
-      };
-    },
-  }),
-  define({
-    name: "pharmacies_near",
-    title: "Farmacias de turno cerca",
-    description:
-      "Farmacias de turno dentro de un radio de un punto, ordenadas por distancia en línea recta.",
-    dataset: "farmacias",
-    inputShape: {
-      lat: latArg.describe("latitud del punto de referencia"),
-      lon: lonArg.describe("longitud del punto de referencia"),
-      radius_km: z.number().min(0.1).max(50).optional().default(3),
-      date: dateArg,
-      limit: z.number().int().min(1).max(50).optional().default(10),
-    },
-    handler: (snapshot, args) => {
-      const farmacias = snapshot.farmacias;
-      if (!farmacias) return NO_DATASET;
-      const duty = dutyFor(farmacias, args.date as string | undefined);
-      if ("error" in duty) return { data: { error: duty.error }, isError: true };
-
-      const found = nearest(duty.pharmacies, {
-        lat: args.lat as number,
-        lon: args.lon as number,
-        radius_km: (args.radius_km as number) ?? 3,
-        limit: (args.limit as number) ?? 10,
-      });
-      return {
-        data: {
-          turno: duty.lookup.turno,
-          service_date: duty.window.service_date,
-          window: { from: duty.window.from, to: duty.window.to },
-          radius_km: (args.radius_km as number) ?? 3,
-          count: found.length,
-          total_del_turno: duty.pharmacies.length,
-          sin_geocodificar: duty.pharmacies.filter((p) => p.lat === null).length,
-          pharmacies: found.map((row) => toPharmacySummary(row.pharmacy, row.distance_km)),
-        },
-      };
-    },
-  }),
-  define({
-    name: "duty_turno_on",
-    title: "Turno de un día",
-    description:
-      "Qué número de turno (1 a 30) está de guardia un día, con el detalle por sección. " +
-      "Útil para entender la rotación sin listar las 850 farmacias.",
-    dataset: "farmacias",
-    inputShape: { date: dateArg },
-    handler: (snapshot, args) => {
-      const farmacias = snapshot.farmacias;
-      if (!farmacias) return NO_DATASET;
-      const duty = dutyFor(farmacias, args.date as string | undefined);
-      if ("error" in duty) return { data: { error: duty.error }, isError: true };
-
-      const sections = new Map<number | null, number>();
-      for (const pharmacy of duty.pharmacies) {
-        sections.set(pharmacy.section, (sections.get(pharmacy.section) ?? 0) + 1);
-      }
-      return {
-        data: {
-          turno: duty.lookup.turno,
-          turno_derivado_del_ciclo: duty.lookup.derived,
-          service_date: duty.window.service_date,
-          window: { from: duty.window.from, to: duty.window.to },
-          count: duty.pharmacies.length,
-          sections: [...sections.entries()]
-            .sort((a, b) => (a[0] ?? 99) - (b[0] ?? 99))
-            .map(([section, count]) => ({ section, count })),
-        },
-      };
-    },
-  }),
-  define({
-    name: "find_pharmacy",
-    title: "Buscar farmacia",
-    description:
-      "Busca una farmacia por nombre, calle o barrio y dice en qué turno está y cuándo le toca " +
-      "guardia las próximas veces.",
-    dataset: "farmacias",
-    inputShape: {
-      query: z.string().min(2).describe("nombre, calle o barrio"),
-      limit: z.number().int().min(1).max(50).optional().default(10),
-    },
-    handler: (snapshot, args) => {
-      const farmacias = snapshot.farmacias;
-      if (!farmacias) return NO_DATASET;
-      const today = todayInCordoba();
-      const found = findPharmacies(
-        farmacias.pharmacies.filter((p) => p.active),
-        args.query as string,
-        (args.limit as number) ?? 10,
-      );
-      return {
-        data: {
-          query: args.query,
-          count: found.length,
-          pharmacies: found.map((pharmacy) => ({
-            ...toPharmacySummary(pharmacy),
-            next_duty_dates: nextDutyDates(farmacias.calendars, pharmacy.turno, today, 3),
-          })),
-        },
-      };
-    },
-  }),
-  define({
-    name: "get_pharmacy",
-    title: "Detalle de farmacia",
-    description: "Devuelve una farmacia completa por id, con sus próximas guardias.",
-    dataset: "farmacias",
-    inputShape: { id: z.string().describe("id estable de la farmacia") },
-    handler: (snapshot, { id }) => {
-      const farmacias = snapshot.farmacias;
-      if (!farmacias) return NO_DATASET;
-      const pharmacy = getPharmacy(farmacias.pharmacies, id as string);
-      if (!pharmacy) {
-        return { data: { id, error: "No existe una farmacia con ese id" }, isError: true };
-      }
-      return {
-        data: {
-          pharmacy,
-          next_duty_dates: nextDutyDates(farmacias.calendars, pharmacy.turno, todayInCordoba(), 5),
+          collections: list.map((collection) => {
+            const store = snapshot[collection.descriptor.id] ?? null;
+            return {
+              id: collection.descriptor.id,
+              title: collection.descriptor.title,
+              available: store !== null,
+              sources: store === null ? [] : collection.sources(store),
+              ...(store === null
+                ? { error: "La fuente no está cargada" }
+                : collection.status(store)),
+            };
+          }),
         },
       };
     },
@@ -436,21 +422,33 @@ const FARMACIAS_TOOLS: ToolDef<z.ZodRawShape>[] = [
 ];
 
 /**
- * Definición única de los tools: la usan el servidor stdio (apps/mcp) y el
- * Worker de Cloudflare (apps/worker) para no duplicar lógica ni descripciones.
+ * Un id pelado (sin prefijo) es compatibilidad con los ids anteriores: se busca
+ * en todas las colecciones cargadas y sólo resuelve si no es ambiguo.
  */
-export const TOOLS: ToolDef<z.ZodRawShape>[] = [...AGENDA_TOOLS, ...FARMACIAS_TOOLS];
+function resolveBare(snapshot: Snapshot, local: string): string | null {
+  const hits = COLLECTIONS.filter((collection) => {
+    const store = snapshot[collection.descriptor.id];
+    if (store === null || store === undefined) return false;
+    return collection.get(store, [local], []).found.length > 0;
+  });
+  if (hits.length === 1) return (hits[0] as Collection<unknown>).descriptor.id;
+  if (hits.length > 1) {
+    throw new DataError("invalid_id", `El id "${local}" existe en más de una colección`, {
+      hint: "Usá el id con prefijo, como lo devuelve search.",
+      valid_values: hits.map((c) => `${c.descriptor.id}:${local}`),
+    });
+  }
+  return null;
+}
 
-export const STATUS_RESOURCE = {
-  name: "status",
-  uri: "agenda://status",
-  title: "Estado de las fuentes",
+/** Recurso MCP único: el catálogo. La URI no cambia nunca; su contenido crece. */
+export const CATALOG_RESOURCE = {
+  name: "catalog",
+  uri: "cordoba://catalog",
+  title: "Catálogo de datos públicos de Córdoba",
   mimeType: "application/json",
   read: (snapshot: Snapshot): Record<string, unknown> => {
-    const tool = TOOLS.find((t) => t.name === "source_status")!;
-    return envelope(tool, snapshot, tool.handler(snapshot, {}).data);
+    const tool = TOOLS.find((t) => t.name === "list_collections") as ToolDef<z.ZodRawShape>;
+    return envelope(snapshot, tool.handler(snapshot, { include: ["sources", "examples"] }).data);
   },
 } as const;
-
-/** Fecha de referencia para los tools que aceptan "hoy"/"mañana". */
-export const resolveDate = resolveDateInput;

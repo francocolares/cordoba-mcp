@@ -1,19 +1,20 @@
 /**
- * MCP sobre streamable HTTP. Cada POST trae un request JSON-RPC y se responde
- * con un único JSON; el canal server->client es el `GET /mcp` con SSE (ver
- * sse.ts), que sirve para avisar `notifications/tools/list_changed`.
+ * MCP sobre streamable HTTP, sin estado: cada POST trae un request JSON-RPC y
+ * se responde con un único JSON. No hay registro de sesiones, ni Durable
+ * Objects, ni canal server->client.
  *
- * Sigue sin estado compartido: no hay registro de sesiones ni Durable Objects.
- * El truco es que el `Mcp-Session-Id` lleva adentro la revisión de tools con la
- * que el cliente hizo el handshake, así que cada isolate puede decidir solo si
- * ese cliente está viendo una lista vieja. Las tools son las mismas que usa el
- * servidor stdio: `TOOLS` de core.
+ * No hay canal server->client a propósito. Antes existía un `GET /mcp` con SSE
+ * cuyo único trabajo era emitir `notifications/tools/list_changed`; con la
+ * superficie congelada en cuatro tools (`TOOLS` de core) esa notificación no se
+ * dispara nunca, porque sumar datos no cambia `tools/list`. Lo que cambia se
+ * descubre con `list_collections`, y `catalog_version` viaja en cada respuesta.
  */
 import {
+  CATALOG_RESOURCE,
   SERVER_INFO as CORE_SERVER_INFO,
   envelope,
+  SERVER_INSTRUCTIONS,
   type Snapshot,
-  STATUS_RESOURCE,
   TOOLS,
 } from "@cordoba/core/web";
 import { z } from "zod";
@@ -56,48 +57,17 @@ function toolList() {
 function resourceList() {
   return [
     {
-      uri: STATUS_RESOURCE.uri,
-      name: STATUS_RESOURCE.name,
-      title: STATUS_RESOURCE.title,
-      mimeType: STATUS_RESOURCE.mimeType,
+      uri: CATALOG_RESOURCE.uri,
+      name: CATALOG_RESOURCE.name,
+      title: CATALOG_RESOURCE.title,
+      mimeType: CATALOG_RESOURCE.mimeType,
     },
   ];
 }
 
-/** djb2. No es criptográfico: sólo detecta cambios, no protege nada. */
-function hash(text: string): string {
-  let h = 5381;
-  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(36);
-}
-
-/**
- * Huella de lo que el cliente ve en `tools/list` y `resources/list`. Es el
- * disparador de la notificación: cambia cuando se agrega, saca o edita un tool
- * (nombre, título, descripción o schema), y NO cambia en los deploys que sólo
- * traen datos nuevos, que son la mayoría (el cron diario). Así los clientes no
- * re-listan todos los días al vacío.
- */
-export const TOOLS_REVISION: string = hash(
-  JSON.stringify({ tools: toolList(), resources: resourceList() }),
-);
-
-const SESSION_SEPARATOR = "~";
-
-/**
- * `<revisión>~<uuid>`. Sin firmar a propósito: lo único que el server deduce de
- * acá es si le manda una notificación o no, así que falsificarlo sólo consigue
- * que te notifiquen de más. No hay autorización ni estado colgado de la sesión.
- */
+/** Sin estado colgado: es un uuid y nada más. */
 export function newSessionId(): string {
-  return `${TOOLS_REVISION}${SESSION_SEPARATOR}${crypto.randomUUID()}`;
-}
-
-/** La revisión con la que se abrió esa sesión, o null si no se puede leer. */
-export function revisionOf(sessionId: string | null | undefined): string | null {
-  if (!sessionId) return null;
-  const [revision] = sessionId.split(SESSION_SEPARATOR);
-  return revision ? revision : null;
+  return crypto.randomUUID();
 }
 
 /** Para saber si hay que emitir el header `Mcp-Session-Id` en la respuesta. */
@@ -116,6 +86,7 @@ function callTool(snapshot: Snapshot, params: Record<string, unknown> | undefine
     throw {
       code: INVALID_PARAMS,
       message: `No existe el tool "${name ?? ""}"`,
+      data: { available: TOOLS.map((t) => t.name) },
     } satisfies JsonRpcError;
   }
   const parsed = z.object(tool.inputShape).safeParse(params?.["arguments"] ?? {});
@@ -126,9 +97,9 @@ function callTool(snapshot: Snapshot, params: Record<string, unknown> | undefine
       data: parsed.error.issues,
     } satisfies JsonRpcError;
   }
-  const { data, isError } = tool.handler(snapshot, parsed.data);
+  const { data, isError, collection } = tool.handler(snapshot, parsed.data);
   return {
-    content: textContent(envelope(tool, snapshot, data)),
+    content: textContent(envelope(snapshot, data, collection)),
     ...(isError ? { isError: true } : {}),
   };
 }
@@ -142,12 +113,11 @@ function dispatch(snapshot: Snapshot, request: JsonRpcRequest): unknown {
         typeof asked === "string" && SUPPORTED_PROTOCOLS.has(asked) ? asked : PROTOCOL_VERSION;
       return {
         protocolVersion: version,
-        // Las notificaciones salen por el GET con SSE (sse.ts). Ver README,
-        // "Política de cambios en tools".
-        capabilities: { tools: { listChanged: true }, resources: { listChanged: true } },
+        // Sin `listChanged`: la superficie está congelada, así que no hay nada
+        // que notificar y no mentimos sobre una capacidad que no usamos.
+        capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions:
-          "Agenda de eventos de la ciudad de Córdoba (Argentina). Las fechas se interpretan en America/Argentina/Cordoba.",
+        instructions: SERVER_INSTRUCTIONS,
       };
     }
     case "ping":
@@ -162,15 +132,15 @@ function dispatch(snapshot: Snapshot, request: JsonRpcRequest): unknown {
       return { resourceTemplates: [] };
     case "resources/read": {
       const uri = request.params?.["uri"];
-      if (uri !== STATUS_RESOURCE.uri) {
+      if (uri !== CATALOG_RESOURCE.uri) {
         throw { code: INVALID_PARAMS, message: `Resource desconocido: ${String(uri)}` };
       }
       return {
         contents: [
           {
-            uri: STATUS_RESOURCE.uri,
-            mimeType: STATUS_RESOURCE.mimeType,
-            text: JSON.stringify(STATUS_RESOURCE.read(snapshot), null, 1),
+            uri: CATALOG_RESOURCE.uri,
+            mimeType: CATALOG_RESOURCE.mimeType,
+            text: JSON.stringify(CATALOG_RESOURCE.read(snapshot), null, 1),
           },
         ],
       };
