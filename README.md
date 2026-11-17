@@ -1,20 +1,25 @@
-# cordoba-mcp — agenda de Córdoba (scraper + MCP)
+# cordoba-mcp — los datos públicos de Córdoba, para tu asistente
 
-Monorepo TypeScript (pnpm workspaces + Turborepo) que scrapea la **Agenda Turística de la
-Municipalidad de Córdoba**, guarda los eventos con histórico en el repo y los expone a Claude
-(o cualquier cliente MCP) por stdio.
+**Una fuente de datos unificada y estandarizada para potenciar la riqueza de los datos públicos de
+Córdoba con la vanguardia en inteligencia artificial.**
+
+Monorepo TypeScript (pnpm workspaces + Turborepo) que scrapea fuentes públicas de Córdoba, las
+normaliza a un modelo común, guarda los datos con histórico en el repo y los expone por MCP en
+**<https://cordobamcp.com/mcp>** a Claude, ChatGPT o cualquier cliente que hable streamable HTTP.
 
 ```
-apps/mcp       servidor MCP local por stdio
 apps/scraper   CLI: validate | scrape | run
-apps/web       landing con los próximos eventos (Astro, build estático)
+apps/web       landing (Astro, build estático)
 apps/worker    Worker de Cloudflare: la landing + el MCP remoto en /mcp
-packages/core  @cordoba/core: gviz, normalización, store, validador, queries, tools
+packages/core  @cordoba/core: catálogo de colecciones, normalización, store, validador, queries, tools
 data/          datos commiteados (git scraping): events.jsonl, changes.jsonl, status.json, raw/
 ```
 
-Los 11 tools están definidos una sola vez, en `packages/core/src/tools.ts`, y los consumen los dos
-transportes: stdio (`apps/mcp`) y HTTP (`apps/worker`).
+Sólo hay camino remoto: no se instala nada, no hay servidor stdio. La superficie son **cuatro
+tools** (`list_collections`, `search`, `get`, `source_status`), definidas una sola vez en
+`packages/core/src/tools.ts`, y está **congelada**: sumar una fuente o una colección es registrar
+un descriptor en `packages/core/src/collections/`, no agregar una tool. Por eso un cliente que ya
+tiene `tools/list` cacheado no necesita reconectar para ver datos nuevos.
 
 ## Puesta en marcha
 
@@ -170,139 +175,118 @@ archivo mal exportado.
 
 ## MCP
 
-`.mcp.json` ya está en la raíz; Claude Code lo levanta solo (requiere `pnpm build` previo):
+Se conecta por URL, sin instalar nada. `.mcp.json` ya está en la raíz y Claude Code lo levanta solo:
 
 ```json
 {
   "mcpServers": {
-    "cordoba-mcp": {
-      "command": "node",
-      "args": ["apps/mcp/dist/index.js"],
-      "env": { "AGENDA_DATA_PATH": "data/events.jsonl" }
-    }
+    "cordoba-mcp": { "type": "http", "url": "https://cordobamcp.com/mcp" }
   }
 }
 ```
 
-Para usarlo desde otra máquina sin clonar el repo, en lugar de `AGENDA_DATA_PATH` usar
-`AGENDA_DATA_URL=https://raw.githubusercontent.com/<user>/<repo>/main/data/events.jsonl`
-(`status.json` se busca al lado). Los datos se cachean en memoria 10 minutos.
+Para apuntar al Worker local: `pnpm dev:worker` y la URL `http://127.0.0.1:8799/mcp`.
 
-Tools:
+### Las cuatro tools
 
-| Tool              | Parámetros                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------- |
-| `search_events`   | `query?`, `category?`, `date_from?`, `date_to?`, `free_only?`, `include_past?`, `limit?` |
-| `events_on`       | `date` (`hoy`, `mañana` o `aaaa-mm-dd`)                                                  |
-| `this_weekend`    | `free_only?`, `category?` (viernes 18:00 → domingo 23:59)                                |
-| `get_event`       | `id` (devuelve el evento completo, sin truncar)                                          |
-| `list_categories` | —                                                                                        |
-| `source_status`   | — (reporta las dos fuentes)                                                              |
+| Tool               | Parámetros                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_collections` | `collection?`, `include?` (`sources`, `examples`, `taxonomies`)                                                                                                |
+| `search`           | `collection`, `query?`, `date?{from,to,include_past}`, `near?{lat,lon,radius_km}`, `filters?`, `source?`, `group_by?`, `sort?`, `fields?`, `limit?`, `cursor?` |
+| `get`              | `ids[]` (con prefijo), `expand?`                                                                                                                               |
+| `source_status`    | `collection?`                                                                                                                                                  |
 
-Farmacias de turno:
+Más el resource `cordoba://catalog`, de URI fija: lo que crece es su contenido, no la lista de
+resources.
 
-| Tool                 | Parámetros                                                                   |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `pharmacies_on_duty` | `date?` (`ahora` por default), `barrio?`, `near_lat?`, `near_lon?`, `limit?` |
-| `pharmacies_near`    | `lat`, `lon`, `radius_km?` (3), `date?`, `limit?`                            |
-| `duty_turno_on`      | `date?` → número de turno y conteo por sección, sin listar las 851           |
-| `find_pharmacy`      | `query` (nombre, calle o barrio) → en qué turno está y sus próximas guardias |
-| `get_pharmacy`       | `id`                                                                         |
+**El eje es la colección, no la fuente.** Una colección es un tipo de registro (`eventos`,
+`farmacias_turno`) y puede alimentarse de varias fuentes; `source` es un filtro opcional. Así
+sumar un organismo nuevo a `eventos` no cambia nada de lo que el cliente ve.
 
-Más el resource `agenda://status`. Toda respuesta incluye `source`, `source_url`, `timezone` y
-`data_as_of` **de la fuente que la sirvió**; en los listados de la agenda la `description` se trunca
-a 300 caracteres. Las respuestas de farmacias agregan `turno_window` y `disclaimer`, y marcan
-`turno_derivado_del_ciclo: true` cuando la fecha cae fuera de los años con turnero cargado.
+Colecciones de hoy:
 
-Smoke test de extremo a extremo (levanta el server y llama a cada tool):
+| Colección         | Fuente                                                       | Filtros declarados                          |
+| ----------------- | ------------------------------------------------------------ | ------------------------------------------- |
+| `eventos`         | Agenda Turística – Municipalidad de Córdoba                  | `category`, `free_only`, `include_inactive` |
+| `farmacias_turno` | Cronograma de Guardias – Colegio de Farmacéuticos de Córdoba | `on_duty`, `barrio`, `turno`, `seccion`     |
+
+### Convenciones de la API
+
+- **Fechas:** instantes en ISO 8601 con offset de Córdoba (`2026-11-18T20:00:00-03:00`), fechas
+  sin hora en `aaaa-mm-dd`. La entrada acepta los tokens relativos que declara cada colección
+  (`hoy`, `mañana`, `ahora`, `fin_de_semana`) y la respuesta siempre devuelve `resolved` con lo
+  que se interpretó.
+- **Coordenadas:** `lat`/`lon` (nunca `lng`), `radius_km` de entrada, `distance_km` de salida.
+  Las colecciones sin coordenadas responden `unsupported` en vez de ignorar el `near`.
+- **Paginación:** `limit` (default 20, máx 100) y `cursor` opaco. La respuesta trae `count`,
+  `total`, `truncated` y `next_cursor`.
+- **Ids:** `<collection>:<source>:<id_local>`, que es lo que `get` espera. El prefijo se arma al
+  serializar: en los `.jsonl` el id sigue siendo el local, así que esto no obliga a re-ingestar.
+  `get` acepta un id pelado mientras no sea ambiguo.
+- **Errores:** una sola forma, con `isError: true`:
+  `{ "error": { "code", "message", "hint", "valid_values" } }`. Códigos: `unknown_collection`,
+  `unknown_filter`, `invalid_filter_value`, `invalid_date`, `invalid_cursor`, `invalid_id`,
+  `source_unavailable`, `not_found`, `unsupported`. `valid_values` convierte el error en
+  discovery: el modelo se corrige sin tener que llamar a `list_collections`.
+- **Envelope:** igual en todas las respuestas, con `service`, `collection`, `sources[]` (nombre,
+  url, licencia y `data_as_of` de cada una), `timezone`, `catalog_version` y `notes`. Los
+  supuestos del dominio (p. ej. que el horario de la guardia no figura en la planilla del
+  Colegio) viajan como `notes` de la colección.
+
+Smoke test de extremo a extremo (recorre toda la superficie contra un server corriendo):
 
 ```bash
-pnpm --filter @cordoba/mcp run smoke
+pnpm --filter @cordoba/worker run smoke            # contra wrangler dev
+node apps/worker/smoke.mjs https://cordobamcp.com/mcp
 # o con el inspector:
-npx @modelcontextprotocol/inspector node apps/mcp/dist/index.js
+npx @modelcontextprotocol/inspector
 ```
 
 ### Política de cambios en tools
 
 `serverInfo.version` sale de una sola fuente: el campo `version` de
 `packages/core/package.json`, exportado como `SERVER_VERSION` / `SERVER_INFO` desde
-`@cordoba/core`. Lo reportan igual el servidor stdio y el Worker; para bumpear la versión se
-toca ese `package.json` y nada más.
+`@cordoba/core`. Para bumpear la versión se toca ese `package.json` y nada más.
 
-Reglas para tocar los tools:
+**La regla es que la superficie no cambia.** Lo que obliga a un cliente a reconectar no es un
+deploy —con streamable HTTP sin estado, el isolate nuevo atiende el próximo POST y el cliente no
+nota nada—, sino que cambie lo que se entrega en el handshake. Son tres cosas, y las tres están
+congeladas a propósito:
 
-- **Cambios compatibles** (parámetros nuevos _opcionales_, cambios de `description` o `title`,
-  campos nuevos en la respuesta) se hacen **en el lugar**, sobre el tool existente, y se bumpea
-  la versión minor.
-- **Cambios incompatibles** (renombrar o sacar un parámetro, volver obligatorio uno que era
-  opcional, cambiar el tipo o el significado de un campo) **no se hacen en el lugar**: se crea un
-  tool nuevo con sufijo `_v2` (`search_events_v2`) y el anterior queda funcionando, marcado como
-  deprecado **en su `description`** (`DEPRECADO: usar search_events_v2.`) durante **al menos una
-  versión** antes de sacarlo.
-- Los clientes ya conectados se enteran por `notifications/tools/list_changed`: ver abajo.
+1. **`tools/list`:** cuatro tools. Una colección nueva no la toca.
+2. **`instructions` del `initialize`:** queda pegada a la sesión, así que **no nombra fuentes ni
+   colecciones concretas** (`SERVER_INSTRUCTIONS`, `packages/core/src/branding.ts`). Si las
+   nombrara, cada fuente nueva dejaría mintiendo a los clientes ya conectados.
+3. **`resources/list`:** un resource de URI fija (`cordoba://catalog`) cuyo contenido crece.
 
-#### Avisar cambios en caliente (`listChanged`)
+Consecuencias prácticas:
 
-El servidor stdio declara `tools: { listChanged: true }` y `resources: { listChanged: true }` en
-el `initialize`, y expone un punto único para cambiar el set de tools en runtime
-(`apps/mcp/src/server.ts`):
+- Agregar datos (colección nueva, fuente nueva dentro de una colección, filtro nuevo declarado en
+  un descriptor) es **siempre compatible** y no necesita aviso: el modelo lo descubre con
+  `list_collections`, y `catalog_version` viaja en cada respuesta para que note que cambió.
+- Un cambio incompatible en una de las cuatro tools se trata como lo que es: un evento raro, que
+  se hace en una versión mayor y se anuncia en el README y en la landing.
+- **No hay canal server→client.** Antes había un `GET /mcp` con SSE cuyo único trabajo era emitir
+  `notifications/tools/list_changed`, con TTL, keepalive, `Last-Event-ID` y la revisión de tools
+  metida dentro del `Mcp-Session-Id`. Con la superficie congelada esa notificación no se dispara
+  nunca, así que se borró junto con `apps/worker/src/sse.ts` y el servidor no declara
+  `listChanged`: el `GET /mcp` devuelve `405` (la spec lo contempla y el SDK lo trata como caso
+  esperado). Si algún día hay que volver a notificar un cambio de superficie, el mecanismo está en
+  el historial de git, no mantenido "por si acaso".
 
-```ts
-const mcp = createCordobaMcpServer();
+### Rutas HTTP de datos
 
-mcp.setToolEnabled("pharmacies_on_duty", false); // oculta el tool y notifica
-mcp.refreshTools(); // notifica sin tocar el set
-mcp.enabledToolNames(); // qué ve hoy un tools/list
-```
+Se generan iterando el catálogo, así que una colección nueva aparece sola:
 
-`setToolEnabled` usa el mecanismo nativo del SDK (`RegisteredTool.enable()` / `.disable()`), que
-ya emite la notificación por la sesión activa; `refreshTools()` es para cuando se modifica un tool
-por fuera de enable/disable. El único consumidor real hoy es `syncToolsWithSnapshot()`, que sigue
-el estado del dataset de farmacias (puede faltar o aparecer entre recargas del `SnapshotCache`) y
-está **apagado por defecto** para no cambiar el comportamiento histórico: con
-`CORDOBA_MCP_HIDE_UNAVAILABLE_TOOLS=1` los tools de farmacias desaparecen de `tools/list` cuando la
-fuente no está cargada en vez de devolver un error.
+| Ruta                               | Qué devuelve                            |
+| ---------------------------------- | --------------------------------------- |
+| `/api/{collection}.jsonl`          | los registros crudos, NDJSON            |
+| `/api/{collection}/status.json`    | el estado de esa colección              |
+| `/api/farmacias_turno/turnos.json` | el turnero (extra de esa colección)     |
+| `/health`                          | una fila por colección, con sus conteos |
 
-#### El endpoint HTTP del Worker (`/mcp`) también notifica
-
-`/mcp` tiene canal server→client: un `GET /mcp` con `Accept: text/event-stream`. Sigue **sin
-estado compartido** (no hay registro de sesiones ni Durable Objects): el `Mcp-Session-Id` que se
-emite en el `initialize` lleva adentro la **revisión de tools**, así que cada isolate puede decidir
-por sí solo si el cliente que le llega está viendo una lista vieja.
-
-- **La revisión** (`TOOLS_REVISION`, `apps/worker/src/mcp.ts`) es un hash de lo que devuelven
-  `tools/list` y `resources/list`. Cambia al agregar, sacar o editar un tool (nombre, título,
-  descripción o schema) y **no** cambia en los deploys que sólo traen datos nuevos, que son la
-  mayoría: así los clientes no re-listan todos los días al vacío. Se publica en `/health` como
-  `tools_revision`.
-- **El aviso sale al (re)conectar el stream**, no en el instante del deploy. Es importante:
-  un deploy de Cloudflare **no corta las conexiones abiertas**, el isolate viejo sigue atendiendo
-  su stream. Lo que fuerza la reconexión es el **TTL** del stream (`MCP_SSE_TTL_S`, default 60s en
-  `wrangler.jsonc`), que por eso es el mecanismo de entrega y no una optimización. Ese TTL es
-  directamente **la latencia máxima**: con 60s, un cliente conectado se entera a más tardar 60s
-  después del deploy. Más bajo = avisos más rápidos y más reconexiones.
-
-Hay tres detalles en `apps/worker/src/sse.ts` que salieron de medirlo contra Cloudflare y que
-conviene no "simplificar" sin volver a probar en producción:
-
-1. **Ni un `await` al writer antes de devolver la `Response`.** Escribir bloquea por backpressure
-   mientras nadie lee el readable, y workerd mata el request con _"your Worker's code had hung and
-   would never generate a response"_. En `node:http` no falla: se cuelga callado.
-2. **El keepalive lleva `id:` y `data:` no vacía** (`event: keepalive`). Un bloque con sólo `id:`,
-   o un comentario `: ...`, **no despacha evento** —la spec SSE no despacha con el data buffer
-   vacío—, así que el cliente no refrescaría su resumption token.
-3. **Se mira el `Last-Event-ID`, no sólo el session id.** El cliente nunca rota su
-   `Mcp-Session-Id` (el SDK sólo lo lee de la respuesta del POST), así que con el session id solo
-   se re-notifica en cada reconexión, para siempre.
-
-El TTL además acota los streams huérfanos: `request.signal` **no dispara** cuando el cliente se va
-(medido en producción) y escribir a un socket muerto no falla, así que sin TTL el loop de keepalive
-queda girando para siempre.
-
-Lo que este diseño **no** da: notificar en medio de una sesión por algo que no sea un cambio de
-revisión (un feature flag, una fuente que se cae). Para eso haría falta un broadcast entre
-isolates, y eso sí pide Durable Objects: los streams de distintos clientes caen en isolates
-distintos y no se ven entre ellos.
+Las rutas anteriores (`/api/events.jsonl`, `/api/status.json`, `/api/farmacias.jsonl`,
+`/api/farmacias/status.json`, `/api/farmacias/turnos.json`) se mantienen como alias.
 
 ## Deploy en Cloudflare
 
@@ -313,16 +297,16 @@ emite el certificado solo, pero la zona tiene que estar en la **misma cuenta de 
 Worker.
 
 
-| Ruta                         | Qué devuelve                                                    |
-| ---------------------------- | --------------------------------------------------------------- |
-| `/`                          | la landing de Astro (assets estáticos, binding `ASSETS`)        |
-| `/mcp`                       | MCP por streamable HTTP (sólo POST; sin SSE ni Durable Objects) |
-| `/health`                    | conteos, `data_as_of` y resultado de la última validación       |
-| `/api/events.jsonl`          | los eventos crudos, para consumirlos sin MCP                    |
-| `/api/status.json`           | el `status.json` del último run                                 |
-| `/api/farmacias.jsonl`       | las farmacias crudas, con turno, sección y coordenadas          |
-| `/api/farmacias/turnos.json` | los calendarios `fecha -> turno` por año                        |
-| `/api/farmacias/status.json` | el `status.json` de la última ingesta del turnero               |
+| Ruta                               | Qué devuelve                                                    |
+| ---------------------------------- | --------------------------------------------------------------- |
+| `/`                                | la landing de Astro (assets estáticos, binding `ASSETS`)        |
+| `/mcp`                             | MCP por streamable HTTP (sólo POST; sin SSE ni Durable Objects) |
+| `/health`                          | una fila por colección: conteos, `data_as_of` y validación      |
+| `/api/{collection}.jsonl`          | los registros crudos de una colección, para consumirlos sin MCP |
+| `/api/{collection}/status.json`    | el `status.json` del último run de esa colección                |
+| `/api/farmacias_turno/turnos.json` | los calendarios `fecha -> turno` por año                        |
+
+Las rutas anteriores siguen respondiendo como alias (ver "Rutas HTTP de datos").
 
 Los datos **viajan embebidos en el bundle**: `scripts/embed-data.mjs` convierte `data/events.jsonl`
 y `data/farmacias/` en un módulo TypeScript antes de cada build (el límite del Worker es 3 MB
@@ -433,12 +417,12 @@ manual — incluido el que dispara el scraper cuando baja datos nuevos.
 
 - Los entrypoints fuerzan `ipv4first` en el resolver DNS: en WSL2 y en runners sin IPv6 real,
   `fetch` a `documentos.cordoba.gob.ar` queda colgado esperando AAAA.
-- El MCP remoto es **stateless**: responde cada POST con un JSON (la spec de streamable HTTP lo
-  permite) en lugar de abrir un stream SSE. Alcanza para tools de sólo lectura y evita depender de
-  Durable Objects. Si algún día hace falta notificar cambios al cliente, ahí sí hay que migrar a
-  `agents`/`McpAgent` con DO.
-- Para sumar fuentes (Agencia Córdoba Cultura, Alpogo, PDFs municipales) se implementa la interfaz
-  `Source` de `packages/core/src/sources/base.ts`. Falta todavía: deduplicación entre fuentes,
-  geocodificación y MCP por HTTP.
+- El MCP es **stateless**: responde cada POST con un JSON (la spec de streamable HTTP lo permite)
+  en lugar de abrir un stream SSE, y no hay registro de sesiones ni Durable Objects. Con la
+  superficie de tools congelada no hay nada que notificar, así que tampoco hace falta.
+- Para sumar una fuente se implementa la interfaz `Source` de
+  `packages/core/src/sources/base.ts` y se registra un descriptor de colección en
+  `packages/core/src/collections/` (ver `docs/tools-design.md`). Falta todavía: deduplicación
+  entre fuentes y geocodificación de venues.
 
 Requiere Node >= 22 y pnpm 11 (`corepack enable`).
