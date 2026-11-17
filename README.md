@@ -308,17 +308,49 @@ Worker.
 
 Las rutas anteriores siguen respondiendo como alias (ver "Rutas HTTP de datos").
 
-Los datos **viajan embebidos en el bundle**: `scripts/embed-data.mjs` convierte `data/events.jsonl`
-y `data/farmacias/` en un módulo TypeScript antes de cada build (el límite del Worker es 3 MB
-comprimido y las 851 farmacias suman ~400 KB sin comprimir). No hay KV ni D1: cada commit de datos
-dispara un deploy y así se actualizan. Si falta el dataset de farmacias, el Worker arranca igual y
-los tools de guardias responden un error explícito.
+### Los datos viven en R2
+
+El Worker **no lleva los datos adentro**: los lee del bucket de R2 que declara `wrangler.jsonc`
+(binding `DATA`). Antes viajaban embebidos en el bundle, lo que ataba cada dato nuevo a un deploy
+del código y hacía crecer el bundle con cada colección (616 KB con dos).
+
+El layout del bucket lo escribe `apps/worker/scripts/sync-r2.mjs`:
+
+```
+manifest.json                      lo único mutable: por colección, qué objeto es
+                                   cada archivo y el hash de su contenido
+eventos/records.jsonl              los registros
+eventos/status.json                el status del último run
+farmacias_turno/records.jsonl
+farmacias_turno/status.json
+farmacias_turno/turnos.json
+```
+
+Las claves son **estables** (se sobrescriben, no se acumulan versiones) y el hash del manifest es
+la versión de caché: el Worker cachea cada objeto en la caché del edge con la clave
+`<key>?v=<hash>`, así que una entrada no se invalida, caduca. El manifest se cachea 60 s por
+isolate — esa es la latencia máxima con la que un dato nuevo llega al MCP — y se sube **último**,
+cuando los objetos que referencia ya están arriba.
+
+Quién sube: el workflow que scrapea (`scrape-agenda`, `farmacias-turnero`), no el de deploy. Por
+eso `deploy-cloudflare` ya **no** se dispara por cambios en `data/`: el deploy es sólo para código.
+
+Sin respaldo embebido a propósito. Si R2 no responde, las colecciones quedan en `null`, `search` y
+`get` contestan `source_unavailable`, `/api/*` devuelve 503 y `/health` publica el error en
+`data_source.error`. Si había un snapshot bueno en el isolate, se sigue sirviendo hasta el próximo
+intento: es preferible un dato de hace un rato a ninguno.
 
 ```bash
-pnpm dev:worker    # wrangler dev en :8787 (o --port) con los assets de Astro
-pnpm deploy        # embed-data + wrangler deploy
+pnpm dev:worker                                 # siembra el R2 local y levanta wrangler dev
+pnpm --filter @cordoba/worker run sync-r2       # sube data/ a R2 (necesita credenciales)
+pnpm --filter @cordoba/worker run sync-r2 --dry-run
+pnpm --filter @cordoba/worker run seed-r2       # el R2 simulado de wrangler dev
+pnpm deploy                                     # wrangler deploy (ya no embebe nada)
 pnpm --filter @cordoba/worker run smoke [url]   # cliente MCP real contra el deploy
 ```
+
+El bucket se crea una sola vez, con R2 activado en la cuenta: lo hace `pnpm bootstrap` (paso 7) o,
+a mano, `pnpm --filter @cordoba/worker exec wrangler r2 bucket create cordoba-mcp-data`.
 
 ### Elegir en qué cuenta de Cloudflare se despliega
 

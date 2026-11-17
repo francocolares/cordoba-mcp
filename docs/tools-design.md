@@ -256,13 +256,13 @@ Lo que sigue valiendo para cualquier cambio futuro:
    `expand` queda para datos derivados de la propia colección (hoy, `next_duty_dates`).
 4. **D4 — Prefijo en los ids, ya** (`<collection>:<source>:<id_local>`). Se arma al serializar, así
    que no hubo migración de datos; `get` acepta un id pelado mientras no sea ambiguo.
-5. **D5 — Datos embebidos en el bundle, por ahora.** `data.generated.ts` ya pesa 616 KB con dos
-   colecciones: **pendiente** pasar a R2 + manifest antes de sumar paradas, barrios y venues. Es la
-   única decisión de las seis que todavía no está implementada.
+5. **D5 — Datos en R2 con manifest**, implementado. Claves estables más hash del contenido como
+   versión de caché; el manifest se cachea 60 s por isolate (ésa es la latencia de un dato nuevo) y
+   lo suben los workflows de scrape, no el de deploy. Sin respaldo embebido: si R2 no responde, las
+   colecciones quedan `source_unavailable`.
 6. **D6 — SSE y `TOOLS_REVISION` borrados**, no apagados. El mecanismo queda en el historial de git
    si alguna vez hay que volver a notificar un cambio de superficie.
 
-**Lo que queda pendiente, en orden:** (a) datos a R2 para que cada fuente actualice en su propio
-cron sin deploy; (b) la primera fuente nueva dentro de `eventos` (Córdoba Turismo) y con ella la
-deduplicación de la sección 2.8 del relevamiento; (c) `venues` con coordenadas, que es lo que
-habilita `near` en `eventos`.
+**Lo que queda pendiente, en orden:** (a) la primera fuente nueva dentro de `eventos` (Córdoba
+Turismo) y con ella la deduplicación de la sección 2.8 del relevamiento; (b) `venues` con
+coordenadas, que es lo que habilita `near` en `eventos`.
