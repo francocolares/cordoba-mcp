@@ -8,10 +8,11 @@
  *   4. primer scrape (si todavía no hay data/)
  *   5. compila web + worker
  *   6. crea/actualiza el Worker en Cloudflare (`wrangler deploy`)
- *   7. verifica el deploy (/health + smoke test del MCP)
- *   8. configura el repo de GitHub (secrets del deploy + label de alertas)
+ *   7. crea el bucket de R2 y sube los datasets (el Worker los lee de ahí)
+ *   8. verifica el deploy (/health + smoke test del MCP)
+ *   9. configura el repo de GitHub (secrets del deploy + label de alertas)
  *
- * Los pasos que tocan algo fuera de tu máquina (6 y 8) piden confirmación.
+ * Los pasos que tocan algo fuera de tu máquina (6, 7 y 9) piden confirmación.
  *
  * Uso:
  *   pnpm bootstrap                 # interactivo
@@ -51,7 +52,7 @@ const yellow = (s) => `\u001b[33m${s}\u001b[0m`;
 const red = (s) => `\u001b[31m${s}\u001b[0m`;
 
 let step = 0;
-const TOTAL = 8;
+const TOTAL = 9;
 const notes = [];
 
 function heading(title) {
@@ -154,7 +155,7 @@ ok("pnpm disponible");
 if (!(await exists(join(repoRoot, ".git"))))
   note("no estamos en un repo git: el paso 8 se saltea.");
 const hasGh = await has("gh");
-if (!hasGh) note("sin GitHub CLI (`gh`): el paso 8 te va a dejar instrucciones manuales.");
+if (!hasGh) note("sin GitHub CLI (`gh`): el paso 9 te va a dejar instrucciones manuales.");
 
 // ──────────────────────────────────────────────────────── 2. dependencias
 heading("Instalando dependencias");
@@ -192,6 +193,8 @@ ok("bundle del Worker verificado (wrangler deploy --dry-run)");
 heading("Worker en Cloudflare");
 const workerDir = join(repoRoot, "apps", "worker");
 let deploymentUrl = "";
+/** La cuenta elegida en el paso 6; la reusa el paso 7 (R2). */
+let cloudflareAccount = null;
 if (flags.skipDeploy) {
   note("--skip-deploy: no publico nada en Cloudflare.");
 } else {
@@ -233,6 +236,7 @@ if (flags.skipDeploy) {
       account = accounts[Number(pick) - 1] ?? null;
       if (!account) note("no elegiste cuenta: salteo el deploy.");
     }
+    cloudflareAccount = account;
 
     if (
       account &&
@@ -254,7 +258,49 @@ if (flags.skipDeploy) {
   }
 }
 
-// ───────────────────────────────────────────────────── 7. verificación
+// ──────────────────────────────────────────────────────── 7. R2
+heading("Datasets en R2");
+const bucket = await (async () => {
+  const raw = await readFile(join(workerDir, "wrangler.jsonc"), "utf8");
+  const config = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, ""));
+  return config.r2_buckets?.[0]?.bucket_name ?? null;
+})();
+
+if (flags.skipDeploy) {
+  note("--skip-deploy: no toco R2. Para probar local: pnpm --filter @cordoba/worker run seed-r2");
+} else if (!bucket) {
+  note("wrangler.jsonc no declara un bucket de R2: revisá r2_buckets.");
+} else if (!cloudflareAccount) {
+  note(`sin cuenta de Cloudflare: no puedo crear el bucket ${bucket}.`);
+} else if (
+  await confirm(
+    `Creo el bucket de R2 \`${bucket}\` (si no existe) y subo data/? Requiere R2 activado en la cuenta`,
+  )
+) {
+  const env = { CLOUDFLARE_ACCOUNT_ID: cloudflareAccount.id };
+  // Idempotente: si ya existe, wrangler falla y seguimos a la subida.
+  const created = await run("pnpm", ["exec", "wrangler", "r2", "bucket", "create", bucket], {
+    cwd: workerDir,
+    capture: true,
+    quiet: true,
+    env,
+  });
+  if (created.code === 0) ok(`bucket ${bucket} creado`);
+  else if (/already (exists|owned)/i.test(created.stdout)) ok(`bucket ${bucket} ya existía`);
+  else {
+    note(`no pude crear el bucket ${bucket}. Salida de wrangler:`);
+    console.log(created.stdout.trim().split("\n").slice(-6).join("\n"));
+    note("Si dice que R2 no está habilitado, activalo en el dashboard (R2 → Enable) y reejecutá.");
+  }
+
+  const synced = await run("node", ["apps/worker/scripts/sync-r2.mjs"], { env });
+  if (synced.code === 0) ok("datasets subidos a R2");
+  else note("falló la subida a R2; mirá la salida de arriba.");
+} else {
+  note("R2 salteado. Cuando quieras: pnpm --filter @cordoba/worker run sync-r2");
+}
+
+// ───────────────────────────────────────────────────── 8. verificación
 heading("Verificando el deploy");
 if (!deploymentUrl) {
   note("sin URL de deploy: salteo la verificación.");
@@ -262,16 +308,21 @@ if (!deploymentUrl) {
   try {
     const health = await fetch(`${deploymentUrl}/health`, { signal: AbortSignal.timeout(20_000) });
     const body = await health.json();
-    ok(`/health -> ${health.status}, ${body.events} eventos, validación ${body.validation}`);
+    const resumen = (body.collections ?? [])
+      .map((c) => `${c.id}: ${c.available ? `${c.records} registros` : "no disponible"}`)
+      .join(", ");
+    ok(`/health -> ${health.status}, ${resumen || "sin colecciones"}`);
+    if (body.data_source?.error)
+      note(`los datos no están llegando desde R2: ${body.data_source.error}`);
   } catch (err) {
     note(`no pude leer /health: ${err.message}`);
   }
   const smoke = await run("node", ["apps/worker/smoke.mjs", `${deploymentUrl}/mcp`]);
-  if (smoke.code === 0) ok("el MCP remoto responde a las 6 tools");
+  if (smoke.code === 0) ok("el MCP remoto responde las cuatro tools");
   else note("el smoke test del MCP falló; mirá la salida de arriba.");
 }
 
-// ─────────────────────────────────────────────────────── 8. GitHub
+// ─────────────────────────────────────────────────────── 9. GitHub
 heading("Repo de GitHub");
 if (flags.skipGithub || !(await exists(join(repoRoot, ".git")))) {
   note("paso salteado.");
@@ -341,7 +392,9 @@ if (deploymentUrl) {
 }
 console.log("  MCP:         ya configurado en .mcp.json (http, sin instalar nada)");
 console.log("  Scrapeo:     node apps/scraper/dist/index.js run");
-console.log("  Automático:  Actions `scrape-agenda` (diaria) y `deploy-cloudflare`");
+console.log(
+  "  Automático:  Actions `scrape-agenda` (diaria, sube a R2) y `deploy-cloudflare` (código)",
+);
 if (notes.length > 0) {
   console.log(`\n${bold("Pendientes:")}`);
   for (const message of notes) console.log(`  ${yellow("•")} ${message}`);

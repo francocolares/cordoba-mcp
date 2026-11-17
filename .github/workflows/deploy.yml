@@ -6,13 +6,12 @@ name: deploy-cloudflare
 on:
   push:
     branches: [main]
-    # Todo lo que puede cambiar el bundle o el resultado del pipeline. Faltaban
-    # los archivos de configuración de la raíz: un fix en vitest.config.ts o en
-    # pnpm-workspace.yaml no disparaba el deploy.
+    # Todo lo que puede cambiar el bundle o el resultado del pipeline. `data/`
+    # NO está: los datos viven en R2 y los sube el workflow que scrapea
+    # (sync-r2.mjs), así que un dato nuevo ya no necesita publicar el Worker.
     paths:
       - "apps/**"
       - "packages/**"
-      - "data/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "package.json"
@@ -57,7 +56,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
 
-      # Compila core -> web -> worker (el worker embebe data/ y valida el bundle).
+      # Compila core -> web -> worker (valida el bundle con un deploy --dry-run).
       - run: pnpm build
 
       - id: deploy
@@ -114,6 +113,5 @@ jobs:
             echo "- Desplegado: ${URL:-(no informado)}"
             echo "- Verificado: ${SMOKE_URL:-(no verificado)}"
             echo "- MCP: ${SMOKE_URL:+$SMOKE_URL/mcp}"
-            echo "- Eventos: $(wc -l < data/events.jsonl)"
-            echo "- Farmacias: $(wc -l < data/farmacias/pharmacies.jsonl 2>/dev/null || echo 0)"
+            echo "- Datos: en R2 (los sube el workflow de scrape, no este)"
           } >> "$GITHUB_STEP_SUMMARY"
