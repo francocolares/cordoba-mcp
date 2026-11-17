@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "embed-data": "node scripts/embed-data.mjs",
-    "build": "pnpm run embed-data && tsc --noEmit && wrangler deploy --dry-run --outdir dist",
-    "typecheck": "pnpm run embed-data && tsc --noEmit",
-    "dev": "pnpm run embed-data && wrangler dev",
-    "deploy": "pnpm run embed-data && wrangler deploy",
+    "sync-r2": "node scripts/sync-r2.mjs",
+    "seed-r2": "node scripts/sync-r2.mjs --local",
+    "build": "tsc --noEmit && wrangler deploy --dry-run --outdir dist",
+    "typecheck": "tsc --noEmit",
+    "dev": "pnpm run seed-r2 && wrangler dev",
+    "deploy": "wrangler deploy",
     "smoke": "node smoke.mjs"
   },
   "dependencies": {

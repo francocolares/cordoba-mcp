@@ -60,6 +60,13 @@ export interface CollectionDescriptor {
   notes?: readonly string[];
 }
 
+/** Texto crudo de los archivos de una colección, por nombre. */
+export interface CollectionFiles {
+  /** El `.jsonl` de registros; `null` si no está. */
+  records: string | null;
+  extras: Record<string, string | null>;
+}
+
 export interface SearchRequest {
   query?: string | undefined;
   date?: { from?: string | undefined; to?: string | undefined; include_past?: boolean } | undefined;
@@ -101,11 +108,18 @@ export interface Collection<S> {
   search(store: S, request: SearchRequest): SearchOutcome;
   get(store: S, localIds: string[], expand: string[]): GetOutcome;
   /**
-   * Volcado crudo, para las rutas HTTP `/api/{collection}*`. `jsonl` son los
-   * registros tal como se guardan; `extras` son archivos auxiliares de la
-   * colección (p. ej. el turnero), ruteados por su nombre.
+   * Volcado crudo: `jsonl` son los registros tal como se guardan y `extras` son
+   * los archivos auxiliares (status, turnero), por nombre. Es lo que se sube a
+   * R2 y lo que sirven las rutas `/api/{collection}*`.
    */
   dump(store: S): { jsonl: unknown[]; extras?: Record<string, unknown> };
+  /**
+   * La inversa de `dump`: reconstruye el store desde el texto de esos archivos.
+   * `null` cuando falta lo esencial (sin registros no hay colección). Lo usan
+   * igual el Worker (objetos de R2) y el build de la landing (filesystem), así
+   * que la hidratación se escribe una sola vez por colección.
+   */
+  hydrate(files: CollectionFiles): S | null;
 }
 
 /** Igual que `define()` para tools: borra el genérico para poder listarlas. */

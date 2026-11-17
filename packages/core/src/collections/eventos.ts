@@ -5,11 +5,18 @@
  * `sources()`, sin tocar las tools ni este descriptor.
  */
 
-import { type Collection, countBy, defineCollection, type SearchOutcome } from "../collections.js";
+import {
+  type Collection,
+  type CollectionFiles,
+  countBy,
+  defineCollection,
+  type SearchOutcome,
+} from "../collections.js";
 import { AGENDA_URL, SOURCE_ID, SOURCE_NAME } from "../config.js";
 import { isoDate, resolveDateInput } from "../datetime.js";
 import { DataError } from "../errors.js";
 import { formatId } from "../ids.js";
+import { latestSeen, parseEventsJsonl, parseJsonOr } from "../jsonl.js";
 import { Category, type Event, type RunStatus } from "../models.js";
 import { listCategories, searchEvents, thisWeekend, toSummary } from "../query.js";
 
@@ -150,7 +157,18 @@ export const eventos: Collection<unknown> = defineCollection<EventosStore>({
     };
   },
 
-  dump: (store) => ({ jsonl: store.events }),
+  dump: (store) => ({ jsonl: store.events, extras: { "status.json": store.status } }),
+
+  hydrate: (files: CollectionFiles): EventosStore | null => {
+    if (files.records === null) return null;
+    const events = parseEventsJsonl(files.records);
+    const status = parseJsonOr<RunStatus>(files.extras["status.json"]);
+    return {
+      events,
+      status,
+      data_as_of: status?.last_run ?? latestSeen(events) ?? "",
+    };
+  },
 
   get: (store, localIds, _expand) => {
     const found: Record<string, unknown>[] = [];

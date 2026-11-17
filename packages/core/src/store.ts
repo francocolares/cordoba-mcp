@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import { parseEventsJsonl } from "./jsonl.js";
 import {
   type ChangeRecord,
   CONTENT_FIELDS,
   type Counts,
   type Event,
-  EventSchema,
   type RunStatus,
 } from "./models.js";
 
@@ -37,20 +37,6 @@ async function readIfExists(path: string): Promise<string | null> {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-}
-
-export function parseEventsJsonl(text: string): Event[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "")
-    .map((line, i) => {
-      const parsed = EventSchema.safeParse(JSON.parse(line));
-      if (!parsed.success) {
-        throw new Error(`events.jsonl línea ${i + 1} inválida: ${parsed.error.message}`);
-      }
-      return parsed.data;
-    });
 }
 
 export async function loadEvents(paths: Paths = dataPaths()): Promise<Event[]> {
@@ -211,3 +197,6 @@ export function merge(previous: Event[], scraped: Event[], now: string): MergeRe
   });
   return { events: items, changes, counts };
 }
+
+/** Vive en jsonl.ts (sin Node): se re-exporta para los importadores de siempre. */
+export { parseEventsJsonl };

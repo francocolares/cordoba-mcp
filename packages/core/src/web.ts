@@ -13,6 +13,7 @@ export * from "./datetime.js";
 export * from "./errors.js";
 export * from "./farmacias/web.js";
 export * from "./ids.js";
+export * from "./jsonl.js";
 export * from "./models.js";
 export * from "./query.js";
 export * from "./text.js";

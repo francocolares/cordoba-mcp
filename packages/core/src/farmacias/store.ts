@@ -2,11 +2,11 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import { parsePharmaciesJsonl } from "../jsonl.js";
 import type { ChangeRecord } from "../models.js";
 import {
   type FarmaciasStatus,
   type Pharmacy,
-  PharmacySchema,
   type TurnoCalendar,
   TurnoCalendarsSchema,
 } from "./models.js";
@@ -45,20 +45,6 @@ async function readIfExists(path: string): Promise<string | null> {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
-}
-
-export function parsePharmaciesJsonl(text: string): Pharmacy[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "")
-    .map((line, i) => {
-      const parsed = PharmacySchema.safeParse(JSON.parse(line));
-      if (!parsed.success) {
-        throw new Error(`pharmacies.jsonl línea ${i + 1} inválida: ${parsed.error.message}`);
-      }
-      return parsed.data;
-    });
 }
 
 /** Ordenado por id para que los diffs de git sean estables. */
@@ -154,3 +140,6 @@ export async function saveTurneroFile(
   await writeFile(file, buffer);
   return file;
 }
+
+/** Vive en ../jsonl.ts (sin Node): se re-exporta para los importadores de siempre. */
+export { parsePharmaciesJsonl };

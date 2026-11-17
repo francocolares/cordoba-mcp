@@ -31,6 +31,11 @@ const catalogo = await call("list_collections", { include: ["taxonomies", "examp
 const ids = catalogo.collections.map((c) => c.id);
 console.log("colecciones:", ids.join(", "), "| catalog_version:", catalogo.catalog_version);
 
+// Los datos salen de R2: si una colección no está disponible, el server está
+// sano pero el bucket no tiene (o no sirve) sus objetos.
+const caidas = catalogo.collections.filter((c) => !c.available).map((c) => c.id);
+if (caidas.length > 0) console.warn("⚠ colecciones sin datos en R2:", caidas.join(", "));
+
 // Eventos: texto, un día, el finde y el detalle por id.
 await call("search", { collection: "eventos", query: "museo", limit: 3 });
 await call("search", { collection: "eventos", date: { from: "hoy", to: "hoy" } });

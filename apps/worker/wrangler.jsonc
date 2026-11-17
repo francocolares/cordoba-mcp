@@ -17,6 +17,15 @@
   // `workers.dev` queda activo a propósito: la Action usa esa URL para el smoke
   // test inmediato, sin esperar la propagación del dominio.
   "routes": [{ "pattern": "cordobamcp.com", "custom_domain": true }],
+  // Los datasets viven en R2, no en el bundle: los sube el workflow que
+  // scrapea (scripts/sync-r2.mjs) y el Worker los lee con cache en el isolate
+  // y en la caché del edge. Así el cron de cada fuente no depende del deploy.
+  "r2_buckets": [
+    {
+      "binding": "DATA",
+      "bucket_name": "cordoba-mcp-data"
+    }
+  ],
   "observability": {
     "enabled": true
   }

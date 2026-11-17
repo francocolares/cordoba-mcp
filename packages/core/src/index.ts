@@ -11,6 +11,7 @@ export * from "./errors.js";
 export * from "./farmacias/index.js";
 export * from "./gviz.js";
 export * from "./ids.js";
+export * from "./jsonl.js";
 export * from "./models.js";
 export * from "./normalize.js";
 export * from "./query.js";

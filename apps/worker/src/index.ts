@@ -1,22 +1,13 @@
 /**
  * Worker de Cloudflare: sirve la landing estática de Astro y expone el MCP en
- * /mcp. Los datasets viajan embebidos en el bundle (ver scripts/embed-data.mjs),
- * así que no hay KV, D1 ni fetch externo en el camino crítico.
+ * /mcp. Los datos salen de R2 (ver data.ts), con cache en el isolate y en la
+ * caché del edge: un dato nuevo no necesita un deploy del código.
  *
  * Las rutas de datos (`/health`, `/api/*`) se arman iterando el catálogo de
  * core: una colección nueva aparece sola, sin tocar este archivo.
  */
 import { COLLECTIONS, findCollection, type Snapshot } from "@cordoba/core/web";
-import {
-  DATA_AS_OF,
-  EMBEDDED_AT,
-  EVENTS,
-  FARMACIAS_DATA_AS_OF,
-  FARMACIAS_STATUS,
-  PHARMACIES,
-  STATUS,
-  TURNO_CALENDARS,
-} from "./data.generated.js";
+import { type DataBucket, loadData } from "./data.js";
 import {
   containsInitialize,
   handleMcpPayload,
@@ -27,21 +18,9 @@ import {
 
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  /** Bucket con los datasets. Lo llena scripts/sync-r2.mjs. */
+  DATA?: DataBucket;
 }
-
-/** Un store por colección. `null` = la fuente no vino en este deploy. */
-const snapshot: Snapshot = {
-  eventos: { events: EVENTS, status: STATUS, data_as_of: DATA_AS_OF },
-  farmacias_turno:
-    PHARMACIES.length === 0
-      ? null
-      : {
-          pharmacies: PHARMACIES,
-          calendars: TURNO_CALENDARS,
-          status: FARMACIAS_STATUS,
-          data_as_of: FARMACIAS_DATA_AS_OF,
-        },
-};
 
 const CORS = {
   "access-control-allow-origin": "*",
@@ -76,12 +55,7 @@ const ndjson = (rows: unknown[]) =>
     },
   });
 
-/** Store de una colección, o null si no está cargada. */
-function storeOf(id: string): unknown {
-  return snapshot[id] ?? null;
-}
-
-async function handleMcp(request: Request): Promise<Response> {
+async function handleMcp(request: Request, snapshot: Snapshot): Promise<Response> {
   if (request.method === "DELETE") {
     // Cierre de sesión: no hay registro de sesiones, así que no hay nada que limpiar.
     return new Response(null, { status: 204, headers: CORS });
@@ -122,27 +96,30 @@ async function handleMcp(request: Request): Promise<Response> {
 }
 
 /** `/api/{collection}.jsonl`, `/api/{collection}/status.json` y los extras. */
-function handleApi(path: string): Response | null {
+function handleApi(path: string, snapshot: Snapshot): Response | null {
   const rest = path.slice("/api/".length);
   if (rest === "") return null;
 
+  const known = (id: string) => COLLECTIONS.some((c) => c.descriptor.id === id);
   const jsonlMatch = /^([a-z_]+)\.jsonl$/.exec(rest);
   if (jsonlMatch) {
     const id = jsonlMatch[1] as string;
-    if (!COLLECTIONS.some((c) => c.descriptor.id === id)) return null;
-    const store = storeOf(id);
-    return ndjson(store === null ? [] : findCollection(id).dump(store).jsonl);
+    if (!known(id)) return null;
+    const store = snapshot[id] ?? null;
+    if (store === null)
+      return json({ error: `La colección ${id} no está disponible` }, { status: 503 });
+    return ndjson(findCollection(id).dump(store).jsonl);
   }
 
   const parts = rest.split("/");
   if (parts.length !== 2) return null;
   const [id, file] = parts as [string, string];
-  if (!COLLECTIONS.some((c) => c.descriptor.id === id)) return null;
-  const collection = findCollection(id);
-  const store = storeOf(id);
-  if (store === null) return json({ error: `La colección ${id} no está cargada` }, { status: 404 });
-  if (file === "status.json") return json(collection.status(store));
-  const extra = collection.dump(store).extras?.[file];
+  if (!known(id)) return null;
+  const store = snapshot[id] ?? null;
+  if (store === null) {
+    return json({ error: `La colección ${id} no está disponible` }, { status: 503 });
+  }
+  const extra = findCollection(id).dump(store).extras?.[file];
   return extra === undefined ? null : json(extra);
 }
 
@@ -166,18 +143,32 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
+    const needsData =
+      url.pathname === "/mcp" ||
+      url.pathname === "/mcp/" ||
+      url.pathname === "/health" ||
+      url.pathname.startsWith("/api/") ||
+      url.pathname in LEGACY_API;
+    if (!needsData) return env.ASSETS.fetch(request);
+
+    const data = await loadData(env.DATA);
+
     if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
-      return handleMcp(request);
+      return handleMcp(request, data.snapshot);
     }
 
     if (url.pathname === "/health") {
       return json({
         ok: true,
         server: SERVER_INFO,
-        embedded_at: EMBEDDED_AT,
+        data_source: {
+          kind: "r2",
+          manifest_generated_at: data.manifest?.generated_at ?? null,
+          error: data.error,
+        },
         collections: COLLECTIONS.map((collection) => {
           const id = collection.descriptor.id;
-          const store = storeOf(id);
+          const store = data.snapshot[id] ?? null;
           return {
             id,
             title: collection.descriptor.title,
@@ -189,10 +180,8 @@ export default {
     }
 
     const path = LEGACY_API[url.pathname] ?? url.pathname;
-    if (path.startsWith("/api/")) {
-      const response = handleApi(path);
-      if (response) return response;
-    }
+    const response = handleApi(path, data.snapshot);
+    if (response) return response;
 
     return env.ASSETS.fetch(request);
   },

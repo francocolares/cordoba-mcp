@@ -1,11 +1,16 @@
+/**
+ * Carga de los datasets desde el filesystem o una URL raw. Lo usa el build de
+ * la landing (Astro corre en Node); el Worker carga de R2 con su propio código,
+ * pero la **hidratación es la misma**: ambos terminan llamando a
+ * `collection.hydrate()`, así que el armado del store se escribe una sola vez
+ * por colección (ver packages/core/src/collections/).
+ */
 import { readFile } from "node:fs/promises";
 import type { EventosStore } from "./collections/eventos.js";
+import { eventos } from "./collections/eventos.js";
 import type { FarmaciasTurnoStore } from "./collections/farmaciasTurno.js";
-import type { FarmaciasStatus } from "./farmacias/models.js";
-import { TurnoCalendarsSchema } from "./farmacias/models.js";
-import { parsePharmaciesJsonl } from "./farmacias/store.js";
-import type { RunStatus } from "./models.js";
-import { dataPaths, parseEventsJsonl } from "./store.js";
+import { farmaciasTurno } from "./collections/farmaciasTurno.js";
+import { dataPaths } from "./store.js";
 
 export interface Dataset extends EventosStore {
   loaded_at: number;
@@ -38,26 +43,14 @@ async function readOptional(target: string, isUrl: boolean): Promise<string | nu
 
 export async function loadDataset(options: DatasetOptions = {}): Promise<Dataset> {
   const url = options.url;
+  const isUrl = Boolean(url);
   const eventsTarget = url ?? options.path ?? dataPaths().events;
-  const text = await readSource(eventsTarget, Boolean(url));
-  const events = parseEventsJsonl(text);
-
+  const records = await readSource(eventsTarget, isUrl);
   // status.json vive al lado de events.jsonl, sea un path local o una URL raw.
-  let status: RunStatus | null = null;
-  const statusTarget = eventsTarget.replace(/events\.jsonl$/, "status.json");
-  try {
-    status = JSON.parse(await readSource(statusTarget, Boolean(url))) as RunStatus;
-  } catch {
-    status = null;
-  }
+  const status = await readOptional(eventsTarget.replace(/events\.jsonl$/, "status.json"), isUrl);
 
-  let latestSeen = "";
-  for (const event of events) {
-    if (event.last_seen > latestSeen) latestSeen = event.last_seen;
-  }
-  const dataAsOf = status?.last_run ?? latestSeen ?? new Date().toISOString();
-
-  return { events, status, data_as_of: dataAsOf, loaded_at: Date.now() };
+  const store = eventos.hydrate({ records, extras: { "status.json": status } }) as EventosStore;
+  return { ...store, loaded_at: Date.now() };
 }
 
 /** Las farmacias viven en `<data>/farmacias/`, al lado de events.jsonl. */
@@ -72,25 +65,14 @@ export async function loadFarmaciasDataset(
   const isUrl = Boolean(url);
   const base = farmaciasBase(url ?? options.path ?? dataPaths().events);
 
-  const pharmaciesText = await readOptional(`${base}pharmacies.jsonl`, isUrl);
-  if (pharmaciesText === null) return null;
-  const pharmacies = parsePharmaciesJsonl(pharmaciesText);
+  const records = await readOptional(`${base}pharmacies.jsonl`, isUrl);
+  if (records === null) return null;
 
-  const turnosText = await readOptional(`${base}turnos.json`, isUrl);
-  const calendars = turnosText ? TurnoCalendarsSchema.parse(JSON.parse(turnosText)).calendars : [];
-
-  const statusText = await readOptional(`${base}status.json`, isUrl);
-  const status = statusText ? (JSON.parse(statusText) as FarmaciasStatus) : null;
-
-  let latestSeen = "";
-  for (const pharmacy of pharmacies) {
-    if (pharmacy.last_seen > latestSeen) latestSeen = pharmacy.last_seen;
-  }
-
-  return {
-    pharmacies,
-    calendars,
-    status,
-    data_as_of: status?.last_run ?? latestSeen ?? new Date().toISOString(),
-  };
+  return farmaciasTurno.hydrate({
+    records,
+    extras: {
+      "status.json": await readOptional(`${base}status.json`, isUrl),
+      "turnos.json": await readOptional(`${base}turnos.json`, isUrl),
+    },
+  }) as FarmaciasTurnoStore;
 }

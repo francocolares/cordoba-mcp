@@ -8,7 +8,13 @@
  *   - `on_duty: false`: busca en todo el padrón y devuelve la próxima guardia
  *     de cada una (lo que antes hacía `find_pharmacy`).
  */
-import { type Collection, countBy, defineCollection, type SearchOutcome } from "../collections.js";
+import {
+  type Collection,
+  type CollectionFiles,
+  countBy,
+  defineCollection,
+  type SearchOutcome,
+} from "../collections.js";
 import { isoDate, todayInCordoba } from "../datetime.js";
 import { DataError } from "../errors.js";
 import {
@@ -35,6 +41,7 @@ import {
   turnoWindow,
 } from "../farmacias/query.js";
 import { formatId } from "../ids.js";
+import { latestSeen, parseJsonOr, parsePharmaciesJsonl } from "../jsonl.js";
 
 const ALL = Number.MAX_SAFE_INTEGER;
 
@@ -243,8 +250,24 @@ export const farmaciasTurno: Collection<unknown> = defineCollection<FarmaciasTur
 
   dump: (store) => ({
     jsonl: store.pharmacies,
-    extras: { "turnos.json": { calendars: store.calendars } },
+    extras: {
+      "status.json": store.status,
+      "turnos.json": { calendars: store.calendars },
+    },
   }),
+
+  hydrate: (files: CollectionFiles): FarmaciasTurnoStore | null => {
+    if (files.records === null) return null;
+    const pharmacies = parsePharmaciesJsonl(files.records);
+    const status = parseJsonOr<FarmaciasStatus>(files.extras["status.json"]);
+    const turnos = parseJsonOr<{ calendars: TurnoCalendar[] }>(files.extras["turnos.json"]);
+    return {
+      pharmacies,
+      calendars: turnos?.calendars ?? [],
+      status,
+      data_as_of: status?.last_run ?? latestSeen(pharmacies) ?? "",
+    };
+  },
 
   get: (store, localIds, expand) => {
     const found: Record<string, unknown>[] = [];

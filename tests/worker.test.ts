@@ -1,16 +1,30 @@
-import { describe, expect, it } from "vitest";
-import { EVENTS, PHARMACIES, TURNO_CALENDARS } from "../apps/worker/src/data.generated.js";
+import { beforeEach, describe, expect, it } from "vitest";
+import { resetDataCache } from "../apps/worker/src/data.js";
 import worker, { type Env } from "../apps/worker/src/index.js";
+import { emptyR2, r2FromDataDir } from "./helpers.js";
 
 /** El binding de assets, simulado: devolvemos un marcador para ver que delega. */
-const env: Env = {
-  ASSETS: {
-    fetch: async (request: Request) =>
-      new Response(`assets:${new URL(request.url).pathname}`, {
-        headers: { "content-type": "text/html" },
-      }),
-  },
+const assets = {
+  fetch: async (request: Request) =>
+    new Response(`assets:${new URL(request.url).pathname}`, {
+      headers: { "content-type": "text/html" },
+    }),
 };
+
+/** Los datos salen de R2; el doble los sirve desde data/ con el manifest real. */
+const bucket = r2FromDataDir();
+const env: Env = { ASSETS: assets, DATA: bucket };
+
+const EVENTS = (bucket.files.get("eventos/records.jsonl") ?? "").trim().split("\n");
+const PHARMACIES = (bucket.files.get("farmacias_turno/records.jsonl") ?? "")
+  .trim()
+  .split("\n")
+  .filter(Boolean);
+const TURNO_CALENDARS = JSON.parse(bucket.files.get("farmacias_turno/turnos.json") ?? "{}")
+  .calendars as unknown[];
+
+// El módulo de datos cachea el manifest 60s en el isolate: cada test arranca limpio.
+beforeEach(() => resetDataCache());
 
 const call = (path: string, init?: RequestInit) =>
   worker.fetch(new Request(`https://agenda.test${path}`, init), env);
@@ -25,6 +39,14 @@ const rpc = async (body: unknown) => {
 };
 
 describe("rutas del Worker", () => {
+  it("declara que los datos salen de R2, con la fecha del manifest", async () => {
+    const body = (await (await call("/health")).json()) as {
+      data_source: { kind: string; manifest_generated_at: string | null; error: string | null };
+    };
+    expect(body.data_source).toMatchObject({ kind: "r2", error: null });
+    expect(body.data_source.manifest_generated_at).toBe(bucket.manifest.generated_at);
+  });
+
   it("/health se arma iterando el catálogo", async () => {
     const res = await call("/health");
     expect(res.status).toBe(200);
@@ -83,7 +105,7 @@ describe("rutas del Worker", () => {
     expect(res.headers.get("content-type")).toContain("application/x-ndjson");
     const lines = (await res.text()).trim().split("\n");
     expect(lines).toHaveLength(EVENTS.length);
-    expect(JSON.parse(lines[0]!).id).toBe(EVENTS[0]?.id);
+    expect(JSON.parse(lines[0]!).id).toBe(JSON.parse(EVENTS[0] ?? "{}").id);
   });
 
   it("responde el preflight de CORS", async () => {
@@ -264,5 +286,75 @@ describe("JSON-RPC del MCP", () => {
     });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: { code: number } }).error.code).toBe(-32700);
+  });
+});
+
+describe("los datos vienen de R2", () => {
+  const sinDatos: Env = { ASSETS: assets, DATA: emptyR2() };
+
+  it("lee el manifest una vez y los objetos que declara", async () => {
+    const limpio = r2FromDataDir();
+    await worker.fetch(new Request("https://agenda.test/health"), {
+      ASSETS: assets,
+      DATA: limpio,
+    });
+    expect(limpio.reads[0]).toBe("manifest.json");
+    expect(limpio.reads).toContain("eventos/records.jsonl");
+    expect(limpio.reads).toContain("farmacias_turno/turnos.json");
+
+    // Segundo request dentro del TTL: no vuelve a tocar el bucket.
+    const antes = limpio.reads.length;
+    await worker.fetch(new Request("https://agenda.test/health"), {
+      ASSETS: assets,
+      DATA: limpio,
+    });
+    expect(limpio.reads).toHaveLength(antes);
+  });
+
+  it("sin manifest las colecciones quedan no disponibles, y /health lo dice", async () => {
+    const body = (await (
+      await worker.fetch(new Request("https://agenda.test/health"), sinDatos)
+    ).json()) as {
+      ok: boolean;
+      data_source: { error: string | null };
+      collections: { available: boolean }[];
+    };
+    // El server está sano; lo que falta son los datos, y se reporta como tal.
+    expect(body.ok).toBe(true);
+    expect(body.data_source.error).toContain("manifest.json");
+    expect(body.collections.every((c) => !c.available)).toBe(true);
+  });
+
+  it("sin datos, search contesta source_unavailable en vez de colgarse", async () => {
+    const res = await worker.fetch(
+      new Request("https://agenda.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "search", arguments: { collection: "eventos" } },
+        }),
+      }),
+      sinDatos,
+    );
+    const json = (await res.json()) as {
+      result: { isError: boolean; content: { text: string }[] };
+    };
+    expect(json.result.isError).toBe(true);
+    expect(JSON.parse(json.result.content[0]!.text).error.code).toBe("source_unavailable");
+  });
+
+  it("sin datos, las rutas /api devuelven 503 y no 200 vacío", async () => {
+    const res = await worker.fetch(new Request("https://agenda.test/api/eventos.jsonl"), sinDatos);
+    expect(res.status).toBe(503);
+  });
+
+  it("sin el binding de R2 no explota: lo reporta en /health", async () => {
+    const body = (await (
+      await worker.fetch(new Request("https://agenda.test/health"), { ASSETS: assets })
+    ).json()) as { data_source: { error: string | null } };
+    expect(body.data_source.error).toContain("DATA");
   });
 });
