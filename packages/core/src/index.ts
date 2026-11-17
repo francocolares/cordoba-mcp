@@ -16,3 +16,4 @@ export * from "./store.js";
 export * from "./text.js";
 export * from "./tools.js";
 export * from "./validate.js";
+export * from "./version.js";

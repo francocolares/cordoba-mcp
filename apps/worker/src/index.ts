@@ -15,10 +15,20 @@ import {
   STATUS,
   TURNO_CALENDARS,
 } from "./data.generated.js";
-import { handleMcpPayload, PROTOCOL_VERSION, SERVER_INFO } from "./mcp.js";
+import {
+  containsInitialize,
+  handleMcpPayload,
+  newSessionId,
+  PROTOCOL_VERSION,
+  SERVER_INFO,
+  TOOLS_REVISION,
+} from "./mcp.js";
+import { resolveTtlS, sseResponse } from "./sse.js";
 
 export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
+  /** Vida del stream SSE en segundos; también la latencia máxima del aviso. */
+  MCP_SSE_TTL_S?: string | undefined;
 }
 
 const snapshot: Snapshot = {
@@ -39,7 +49,9 @@ const CORS = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
   "access-control-allow-headers":
-    "content-type, mcp-protocol-version, mcp-session-id, authorization",
+    "content-type, mcp-protocol-version, mcp-session-id, last-event-id, authorization",
+  // Sin esto un cliente en el browser no puede leer el id de sesión que emitimos.
+  "access-control-expose-headers": "mcp-session-id",
   "access-control-max-age": "86400",
 };
 
@@ -66,19 +78,26 @@ const ndjson = (rows: unknown[]) =>
     },
   });
 
-async function handleMcp(request: Request): Promise<Response> {
+async function handleMcp(request: Request, env: Env): Promise<Response> {
   if (request.method === "DELETE") {
-    // Cierre de sesión: el server es stateless, así que no hay nada que limpiar.
+    // Cierre de sesión: no hay registro de sesiones, así que no hay nada que
+    // limpiar. El stream SSE del cliente muere solo por TTL.
     return new Response(null, { status: 204, headers: CORS });
   }
   if (request.method === "GET") {
+    // Canal server->client. Sólo con Accept: text/event-stream; el 405 es la
+    // forma que la spec le da al server para decir "acá no hay SSE", y el SDK
+    // lo trata como caso esperado.
+    if ((request.headers.get("accept") ?? "").includes("text/event-stream")) {
+      return sseResponse(request, CORS, { ttlS: resolveTtlS(env.MCP_SSE_TTL_S) });
+    }
     return json(
       {
-        error: "Este endpoint acepta sólo POST (streamable HTTP sin SSE).",
+        error: "Este endpoint acepta POST, o GET con Accept: text/event-stream.",
         server: SERVER_INFO,
         protocolVersion: PROTOCOL_VERSION,
       },
-      { status: 405, headers: { allow: "POST, DELETE, OPTIONS" } },
+      { status: 405, headers: { allow: "POST, GET, DELETE, OPTIONS" } },
     );
   }
   if (request.method !== "POST") {
@@ -97,7 +116,12 @@ async function handleMcp(request: Request): Promise<Response> {
 
   const response = handleMcpPayload(snapshot, payload);
   if (response === null) return new Response(null, { status: 202, headers: CORS });
-  return json(response, { headers: { "cache-control": "no-store" } });
+  // El id de sesión se emite sólo en el initialize, y lleva adentro la revisión
+  // de tools: es lo que después permite detectar un cliente con la lista vieja.
+  const sessionHeaders: Record<string, string> = containsInitialize(payload)
+    ? { "mcp-session-id": newSessionId() }
+    : {};
+  return json(response, { headers: { "cache-control": "no-store", ...sessionHeaders } });
 }
 
 export default {
@@ -109,13 +133,14 @@ export default {
     }
 
     if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
-      return handleMcp(request);
+      return handleMcp(request, env);
     }
 
     if (url.pathname === "/health") {
       return json({
         ok: true,
         server: SERVER_INFO,
+        tools_revision: TOOLS_REVISION,
         embedded_at: EMBEDDED_AT,
         sources: {
           agenda: {

@@ -222,6 +222,88 @@ pnpm --filter @cordoba/mcp run smoke
 npx @modelcontextprotocol/inspector node apps/mcp/dist/index.js
 ```
 
+### Política de cambios en tools
+
+`serverInfo.version` sale de una sola fuente: el campo `version` de
+`packages/core/package.json`, exportado como `SERVER_VERSION` / `SERVER_INFO` desde
+`@cordoba/core`. Lo reportan igual el servidor stdio y el Worker; para bumpear la versión se
+toca ese `package.json` y nada más.
+
+Reglas para tocar los tools:
+
+- **Cambios compatibles** (parámetros nuevos _opcionales_, cambios de `description` o `title`,
+  campos nuevos en la respuesta) se hacen **en el lugar**, sobre el tool existente, y se bumpea
+  la versión minor.
+- **Cambios incompatibles** (renombrar o sacar un parámetro, volver obligatorio uno que era
+  opcional, cambiar el tipo o el significado de un campo) **no se hacen en el lugar**: se crea un
+  tool nuevo con sufijo `_v2` (`search_events_v2`) y el anterior queda funcionando, marcado como
+  deprecado **en su `description`** (`DEPRECADO: usar search_events_v2.`) durante **al menos una
+  versión** antes de sacarlo.
+- Los clientes ya conectados se enteran por `notifications/tools/list_changed`: ver abajo.
+
+#### Avisar cambios en caliente (`listChanged`)
+
+El servidor stdio declara `tools: { listChanged: true }` y `resources: { listChanged: true }` en
+el `initialize`, y expone un punto único para cambiar el set de tools en runtime
+(`apps/mcp/src/server.ts`):
+
+```ts
+const mcp = createCordobaMcpServer();
+
+mcp.setToolEnabled("pharmacies_on_duty", false); // oculta el tool y notifica
+mcp.refreshTools(); // notifica sin tocar el set
+mcp.enabledToolNames(); // qué ve hoy un tools/list
+```
+
+`setToolEnabled` usa el mecanismo nativo del SDK (`RegisteredTool.enable()` / `.disable()`), que
+ya emite la notificación por la sesión activa; `refreshTools()` es para cuando se modifica un tool
+por fuera de enable/disable. El único consumidor real hoy es `syncToolsWithSnapshot()`, que sigue
+el estado del dataset de farmacias (puede faltar o aparecer entre recargas del `SnapshotCache`) y
+está **apagado por defecto** para no cambiar el comportamiento histórico: con
+`CORDOBA_MCP_HIDE_UNAVAILABLE_TOOLS=1` los tools de farmacias desaparecen de `tools/list` cuando la
+fuente no está cargada en vez de devolver un error.
+
+#### El endpoint HTTP del Worker (`/mcp`) también notifica
+
+`/mcp` tiene canal server→client: un `GET /mcp` con `Accept: text/event-stream`. Sigue **sin
+estado compartido** (no hay registro de sesiones ni Durable Objects): el `Mcp-Session-Id` que se
+emite en el `initialize` lleva adentro la **revisión de tools**, así que cada isolate puede decidir
+por sí solo si el cliente que le llega está viendo una lista vieja.
+
+- **La revisión** (`TOOLS_REVISION`, `apps/worker/src/mcp.ts`) es un hash de lo que devuelven
+  `tools/list` y `resources/list`. Cambia al agregar, sacar o editar un tool (nombre, título,
+  descripción o schema) y **no** cambia en los deploys que sólo traen datos nuevos, que son la
+  mayoría: así los clientes no re-listan todos los días al vacío. Se publica en `/health` como
+  `tools_revision`.
+- **El aviso sale al (re)conectar el stream**, no en el instante del deploy. Es importante:
+  un deploy de Cloudflare **no corta las conexiones abiertas**, el isolate viejo sigue atendiendo
+  su stream. Lo que fuerza la reconexión es el **TTL** del stream (`MCP_SSE_TTL_S`, default 60s en
+  `wrangler.jsonc`), que por eso es el mecanismo de entrega y no una optimización. Ese TTL es
+  directamente **la latencia máxima**: con 60s, un cliente conectado se entera a más tardar 60s
+  después del deploy. Más bajo = avisos más rápidos y más reconexiones.
+
+Hay tres detalles en `apps/worker/src/sse.ts` que salieron de medirlo contra Cloudflare y que
+conviene no "simplificar" sin volver a probar en producción:
+
+1. **Ni un `await` al writer antes de devolver la `Response`.** Escribir bloquea por backpressure
+   mientras nadie lee el readable, y workerd mata el request con _"your Worker's code had hung and
+   would never generate a response"_. En `node:http` no falla: se cuelga callado.
+2. **El keepalive lleva `id:` y `data:` no vacía** (`event: keepalive`). Un bloque con sólo `id:`,
+   o un comentario `: ...`, **no despacha evento** —la spec SSE no despacha con el data buffer
+   vacío—, así que el cliente no refrescaría su resumption token.
+3. **Se mira el `Last-Event-ID`, no sólo el session id.** El cliente nunca rota su
+   `Mcp-Session-Id` (el SDK sólo lo lee de la respuesta del POST), así que con el session id solo
+   se re-notifica en cada reconexión, para siempre.
+
+El TTL además acota los streams huérfanos: `request.signal` **no dispara** cuando el cliente se va
+(medido en producción) y escribir a un socket muerto no falla, así que sin TTL el loop de keepalive
+queda girando para siempre.
+
+Lo que este diseño **no** da: notificar en medio de una sesión por algo que no sea un cambio de
+revisión (un feature flag, una fuente que se cae). Para eso haría falta un broadcast entre
+isolates, y eso sí pide Durable Objects: los streams de distintos clientes caen en isolates
+distintos y no se ven entre ellos.
+
 ## Deploy en Cloudflare
 
 Un único Worker (`cordoba-agenda`) sirve todo en **<https://cordobamcp.com>**, más la URL de

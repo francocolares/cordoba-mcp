@@ -12,3 +12,4 @@ export * from "./models.js";
 export * from "./query.js";
 export * from "./text.js";
 export * from "./tools.js";
+export * from "./version.js";
