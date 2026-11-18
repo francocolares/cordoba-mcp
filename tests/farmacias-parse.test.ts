@@ -12,7 +12,7 @@ import {
 import { validateWorkbook } from "../packages/core/src/farmacias/validate.js";
 import { asInteger, readXlsx, unescapeXml } from "../packages/core/src/farmacias/xlsx.js";
 
-const TURNERO = join(import.meta.dirname, "..", "data", "raw", "farmacias", "turnero-2026.xlsx");
+const TURNERO = join(import.meta.dirname, "fixtures", "turnero-2026.xlsx");
 
 describe("parseEntry", () => {
   it("corta nombre y dirección en el guion y saca el barrio", () => {
@@ -122,7 +122,7 @@ describe("daysInMonth", () => {
   });
 });
 
-describe("la planilla commiteada", () => {
+describe("la planilla de 2026", () => {
   const workbook = parseWorkbook(readXlsx(readFileSync(TURNERO)));
 
   it("trae los 30 turnos y el año completo", () => {
