@@ -4,6 +4,30 @@ dist/
 .astro/
 .wrangler/
 *.log
+*.tsbuildinfo
+
+# Credenciales locales. `.dev.vars*` es el archivo de secrets de wrangler para
+# `wrangler dev`, y es el que más fácil se cuela en un repo de Cloudflare.
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc.local
+
+# Preferencias locales de Claude Code (pueden incluir rutas o permisos propios).
+.claude/settings.local.json
+
+# Salidas sueltas de los workflows y de correr los comandos a mano.
+remoto.json
+validation.json
+
+# Snapshots crudos del scrape (gviz del día, .xlsx del turnero). Son material de
+# debug local: lo que se publica son los datasets normalizados, y el Worker los
+# lee de R2 (apps/worker/scripts/sync-r2.mjs), no del repo. Commitearlos sólo
+# hacía crecer el clone ~30 MB por año sin que nadie los consuma.
+data/raw/

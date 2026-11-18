@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "ask": ["Edit(./README.md)", "Edit(./docs/**)", "Edit(./**/*.md)"]
+  }
+}

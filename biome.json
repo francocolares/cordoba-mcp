@@ -26,7 +26,6 @@
       "!**/pnpm-lock.yaml",
       "!data",
       "!tests/fixtures",
-      "!plan.md",
       "!**/*.generated.ts"
     ]
   },
