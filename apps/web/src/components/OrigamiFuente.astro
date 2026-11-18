@@ -1,0 +1,68 @@
+---
+import FiguraOrigami from "./FiguraOrigami.astro";
+
+interface Props {
+  id: string;
+  lado: "izquierda" | "derecha";
+  visible?: boolean;
+}
+
+const { id, lado, visible = false } = Astro.props;
+---
+
+<div
+  class:list={["fondo", `fondo-${lado}`, visible && "visible"]}
+  data-fondo={id}
+  aria-hidden="true"
+>
+  <FiguraOrigami id={id} class="fondo-svg" />
+</div>
+
+<style>
+  .fondo {
+    position: absolute;
+    inset-block: 0;
+    display: grid;
+    align-items: center;
+    width: min(23rem, 60%);
+    opacity: 0;
+    transition:
+      opacity 280ms ease-out,
+      transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .fondo-izquierda {
+    left: -4%;
+    transform: translateX(-2.5rem) rotate(-5deg);
+  }
+
+  .fondo-derecha {
+    right: -4%;
+    transform: translateX(2.5rem) rotate(5deg);
+  }
+
+  .fondo.visible {
+    opacity: 1;
+    transform: none;
+    transition:
+      opacity 760ms cubic-bezier(0.22, 1, 0.36, 1) 140ms,
+      transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .fondo-svg {
+    transform: translateY(calc(var(--avance, 0) * -2.2rem)) rotate(calc(var(--avance, 0) * 2.6deg));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fondo,
+    .fondo-izquierda,
+    .fondo-derecha {
+      transform: none;
+      transition: opacity 200ms linear;
+    }
+
+    .fondo-svg {
+      transform: none;
+    }
+  }
+</style>

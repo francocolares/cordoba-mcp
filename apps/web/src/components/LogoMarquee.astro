@@ -1,0 +1,145 @@
+---
+import { ALTO_LOGO, type Organismo } from "../data/content";
+
+interface Props {
+  organismos: Organismo[];
+  rotulo?: string;
+}
+
+const { organismos, rotulo = "Fuentes de datos" } = Astro.props;
+
+const vueltas = [0, 1];
+---
+
+<div class="relative border-t border-line bg-bg py-7">
+  <div class="shell flex flex-col items-center gap-5 sm:flex-row sm:gap-8">
+    <span
+      class="shrink-0 text-[10px] font-medium uppercase tracking-[0.2em] text-muted sm:max-w-[11ch]"
+    >
+      {rotulo}
+    </span>
+
+    <div class="marquee min-w-0 flex-1">
+      <div class="marquee-pista">
+        {
+          vueltas.map((vuelta) => (
+            <ul
+              class="marquee-grupo"
+              aria-hidden={vuelta > 0 ? "true" : undefined}
+              aria-label={vuelta === 0 ? "Organismos que publican los datos" : undefined}
+            >
+              {organismos.map((organismo) => (
+                <li>
+                  <a
+                    href={organismo.enlace}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    tabindex={vuelta > 0 ? -1 : undefined}
+                    class="marquee-logo"
+                  >
+                    <img
+                      src={organismo.logo}
+                      width={organismo.ancho}
+                      height={organismo.alto}
+                      alt={vuelta === 0 ? organismo.nombre : ""}
+                      loading="lazy"
+                      decoding="async"
+                      style={`height:${(ALTO_LOGO * organismo.escalaOptica).toFixed(1)}px`}
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .marquee {
+    overflow: hidden;
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 4rem,
+      black calc(100% - 4rem),
+      transparent
+    );
+  }
+
+  .marquee-pista {
+    display: flex;
+    width: max-content;
+    animation: marquee-correr 48s linear infinite;
+  }
+
+  .marquee:hover .marquee-pista,
+  .marquee:focus-within .marquee-pista {
+    animation-play-state: paused;
+  }
+
+  .marquee-grupo {
+    display: flex;
+    align-items: center;
+    gap: 3.5rem;
+    padding-inline-end: 3.5rem;
+    list-style: none;
+    margin: 0;
+  }
+
+  .marquee-logo {
+    display: block;
+    text-decoration: none;
+    opacity: 0.5;
+    filter: grayscale(1);
+    transition:
+      opacity 200ms ease,
+      transform 200ms ease;
+  }
+
+  .marquee-logo:hover,
+  .marquee-logo:focus-visible {
+    opacity: 1;
+    transform: translateY(-1px);
+  }
+
+  .marquee-logo img {
+    width: auto;
+    display: block;
+  }
+
+  @keyframes marquee-correr {
+    from {
+      transform: translate3d(0, 0, 0);
+    }
+    to {
+      transform: translate3d(-50%, 0, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .marquee {
+      overflow-x: auto;
+      scrollbar-width: none;
+      contain: paint;
+    }
+
+    .marquee::-webkit-scrollbar {
+      display: none;
+    }
+
+    .marquee-pista {
+      animation: none;
+    }
+
+    .marquee-logo {
+      opacity: 0.6;
+    }
+
+    .marquee-grupo[aria-hidden="true"] {
+      display: none;
+    }
+  }
+</style>

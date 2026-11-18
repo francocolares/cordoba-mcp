@@ -1,0 +1,47 @@
+---
+/**
+ * El isotipo plegado, quieto y en una sola tinta: la versión marca del fondo
+ * del hero (OrigamiCordoba). Comparten la geometría vía `planosIsotipo`.
+ *
+ * Los planos del hero traen tonos tierra pensados para un fondo casi negro.
+ * Acá, en cambio, el pliegue se dibuja en `currentColor` y lo que distingue un
+ * plano de otro es la opacidad (ver `planosIsotipoMono`). Así la marca hereda el
+ * color del contexto y no arrastra una segunda paleta.
+ */
+import { ISOTIPO_VIEWBOX, planosIsotipoMono } from "../data/isotipo";
+
+interface Props {
+  class?: string;
+  /**
+   * Nombre accesible. Va en `null` cuando al lado hay texto que ya nombra la
+   * marca: dos nombres en el mismo enlace se leen duplicados.
+   */
+  label?: string | null;
+}
+
+const { class: extra = "", label = "Córdoba MCP" } = Astro.props;
+
+const planos = planosIsotipoMono;
+---
+
+<svg
+  viewBox={`0 0 ${ISOTIPO_VIEWBOX.width} ${ISOTIPO_VIEWBOX.height}`}
+  role={label ? "img" : undefined}
+  aria-label={label ?? undefined}
+  aria-hidden={label ? undefined : "true"}
+  fill="currentColor"
+  class:list={["shrink-0", extra]}
+>
+  {
+    planos.map((p) => (
+      <polygon
+        points={p.points}
+        opacity={p.opacity}
+        stroke="currentColor"
+        stroke-width="0.4"
+        stroke-opacity="0.18"
+        stroke-linejoin="round"
+      />
+    ))
+  }
+</svg>

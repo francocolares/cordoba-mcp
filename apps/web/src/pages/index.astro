@@ -1,14 +1,16 @@
 ---
 import { loadDataset, loadFarmaciasDataset, TZ } from "@cordoba/core";
 import ChatShowcase from "../components/ChatShowcase.astro";
-import ClientCard from "../components/ClientCard.astro";
-import EndpointField from "../components/EndpointField.astro";
+import ClaudeSetup from "../components/ClaudeSetup.astro";
+import ContributeCard from "../components/ContributeCard.astro";
+import CopyBox from "../components/CopyBox.astro";
 import Hero from "../components/Hero.astro";
+import MailIcon from "../components/MailIcon.astro";
 import Section from "../components/Section.astro";
 import SiteFooter from "../components/SiteFooter.astro";
 import SiteHeader from "../components/SiteHeader.astro";
 import SourceCard from "../components/SourceCard.astro";
-import { clientes, ENDPOINT, fuentes, REPO } from "../data/content";
+import { BAJA_DATOS, CONTACTO, ENDPOINT, fuentes, pasosClaude, REPO, vias } from "../data/content";
 import { conversaciones } from "../data/conversaciones";
 import Layout from "../layouts/Layout.astro";
 import { elegirEventos, formatearEvento, TZ_CBA } from "../lib/demoEventos";
@@ -49,10 +51,19 @@ const itemsAgenda = elegirEventos(activos).map(formatearEvento);
 const guardia = elegirGuardia(farmaciasActivas, farmacias?.calendars ?? []);
 
 /**
- * Las pestañas que ya contestan van primero y las que están en obra al final,
- * igual que la grilla de fuentes. El orden se decide después de resolver la
- * guardia, porque farmacias cae a "próximamente" si no hay turnero para hoy.
+ * El orden de las pestañas lo manda `fuentes`: las dos secciones de la página
+ * salen de la misma lista, así que una fuente que se mueve de lugar arriba se
+ * mueve también acá. Las que ya contestan van primero —igual que la grilla— y
+ * eso se decide después de resolver la guardia, porque farmacias cae a
+ * "próximamente" si no hay turnero para hoy.
  */
+const ordenFuente = new Map(fuentes.map((f, i) => [f.id, i]));
+
+for (const c of conversaciones) {
+  if (!ordenFuente.has(c.id))
+    throw new Error(`La conversación "${c.id}" no tiene fuente en content.ts`);
+}
+
 const conversacionesConDatos = conversaciones
   .map((c) => {
     if (c.id === "agenda") return { ...c, chat: { ...c.chat, items: itemsAgenda } };
@@ -69,35 +80,48 @@ const conversacionesConDatos = conversaciones
     }
     return c;
   })
-  .sort((a, b) => Number(a.proximamente) - Number(b.proximamente));
+  .sort(
+    (a, b) =>
+      Number(a.proximamente) - Number(b.proximamente) ||
+      (ordenFuente.get(a.id) ?? 0) - (ordenFuente.get(b.id) ?? 0),
+  );
 
 /** Las que ya contestan van primero; entre iguales se respeta el orden del archivo. */
 const fuentesConDatos = [...fuentes].sort((a, b) => Number(b.lista) - Number(a.lista));
 ---
 
 <Layout
-  title="Córdoba MCP — los datos públicos de Córdoba, para tu asistente"
+  title="Córdoba MCP — los datos públicos de Córdoba, para tu agente"
   description="Una fuente de datos unificada y estandarizada para potenciar la riqueza de los datos públicos de Córdoba con la vanguardia en inteligencia artificial. Conectá Claude o ChatGPT y preguntales qué hacer, como le preguntarías a un amigo que vive acá."
 >
   <SiteHeader />
 
   <main>
-    <Hero clientes={clientes} />
+    <Hero />
 
     <ChatShowcase conversaciones={conversacionesConDatos} />
 
     <Section
       id="conectar"
-      titulo="Conectalo en dos minutos"
-      lede="Copiás esta dirección, la pegás donde te la pida, y tu asistente empieza a saber de Córdoba."
+      centrado
+      titulo="Conectalo una vez, lo tenés siempre"
+      lede="Copiás la dirección, la pegás en Claude como conector personalizado, y de ahí en adelante tu agente sabe de Córdoba."
     >
-      <EndpointField endpoint={ENDPOINT} />
+      <CopyBox
+        id="endpoint"
+        rotulo="Dirección del servidor"
+        valor={ENDPOINT}
+        evento="copiar_endpoint"
+        etiquetaBoton="Copiar la dirección del servidor"
+      />
 
-      <div class="mt-12 grid gap-5 sm:grid-cols-2">
-        {clientes.map((cliente) => <ClientCard cliente={cliente} />)}
+      <div class="mt-12 sm:mt-14">
+        <ClaudeSetup pasos={pasosClaude} />
       </div>
-      <p class="mt-8 max-w-[46ch] text-sm text-muted">
-        Si usás otra app que sepa conectarse a servidores externos, la dirección es siempre la misma.
+
+      <p class="mx-auto mt-8 max-w-[52ch] text-center text-sm text-muted">
+        Es un servidor MCP común: si usás otra app que sepa conectarse a servidores externos, la
+        dirección es siempre la misma.
       </p>
     </Section>
 
@@ -109,6 +133,55 @@ const fuentesConDatos = [...fuentes].sort((a, b) => Number(b.lista) - Number(a.l
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {fuentesConDatos.map((fuente) => <SourceCard fuente={fuente} />)}
       </div>
+    </Section>
+
+    <Section
+      id="contribuir"
+      titulo="Dos maneras de contribuir"
+      lede="El proyecto siempre será abierto y los datos son públicos: ayudanos a sostenerlo en el tiempo."
+    >
+      <div class="grid gap-5 lg:grid-cols-2">
+        {vias.map((via) => <ContributeCard via={via} />)}
+      </div>
+
+      <p class="mt-8 max-w-[64ch] text-sm leading-relaxed text-muted">
+        El código es abierto: todas las contribuciones en <a
+          href={REPO}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-body hover:text-ink">GitHub</a
+        > son bienvenidas.
+      </p>
+    </Section>
+    <Section
+      id="baja"
+      centrado
+      titulo="¿Publicás una de estas fuentes y no querés que esté acá?"
+      lede="Escribinos y listo: tomamos tu pedido con prioridad y despublicamos tus datos del servidor con la mayor celeridad, sin pedirte explicaciones ni hacerte llenar formularios."
+    >
+      <CopyBox
+        id="contacto-baja"
+        rotulo="Correo para pedir la baja"
+        valor={CONTACTO}
+        evento="copiar_contacto"
+        etiquetaBoton="Copiar el correo para pedir la baja"
+      />
+
+      <div class="mt-8 flex justify-center">
+        <a
+          href={BAJA_DATOS}
+          data-evento="baja_datos"
+          class="inline-flex items-center gap-2 rounded-card border border-line-strong bg-bg px-4 py-2.5 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
+        >
+          <MailIcon class="size-[18px] text-muted" />
+          Escribir al correo
+        </a>
+      </div>
+
+      <p class="mx-auto mt-8 max-w-[56ch] text-center text-sm text-muted">
+        Decinos de qué organismo sos y qué fuente querés dar de baja. Si preferís otra vía,
+        cualquiera nos sirve: el correo es el camino más rápido.
+      </p>
     </Section>
   </main>
 

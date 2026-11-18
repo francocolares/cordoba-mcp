@@ -1,0 +1,69 @@
+---
+import type { Paso } from "../data/content";
+import { CLAUDE_DOCS } from "../data/content";
+import BrandIcon from "./BrandIcon.astro";
+
+interface Props {
+  pasos: Paso[];
+}
+
+const { pasos } = Astro.props;
+---
+
+<article
+  class="relative isolate mx-auto max-w-2xl overflow-hidden rounded-card border border-line bg-surface p-6 sm:p-9"
+>
+  {/* La marca de Claude, grande y casi apagada: firma el bloque sin pedir un recuadro. */}
+  <BrandIcon
+    name="claude-icon"
+    class="pointer-events-none absolute -top-10 -right-10 -z-10 size-52 text-ink/[0.07] sm:-top-14 sm:-right-12 sm:size-64"
+  />
+
+  <header class="border-b border-line pb-6">
+    <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+      Conector personalizado
+    </p>
+    <h3 class="mt-3 text-2xl">Claude</h3>
+    <p class="mt-2 max-w-[44ch] text-sm text-muted">
+      Se agrega una sola vez, desde la web. Después lo tenés en todos tus chats, también en el
+      celular.
+    </p>
+  </header>
+
+  <ol class="mt-1">
+    {
+      pasos.map((paso, i) => (
+        <li class="flex gap-4 border-b border-line py-5 last:border-b-0 last:pb-0">
+          <span
+            class="mt-px flex size-6 flex-none items-center justify-center rounded-full border border-line-strong bg-bg font-mono text-xs text-accent tabular-nums"
+            aria-hidden="true"
+          >
+            {i + 1}
+          </span>
+          <div class="min-w-0">
+            <p class="font-medium text-ink">{paso.titulo}</p>
+            <p class="mt-1.5 text-sm leading-relaxed text-muted">{paso.detalle}</p>
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+
+  <footer class="mt-7 flex flex-col gap-4 border-t border-line pt-6">
+    <p class="text-sm leading-relaxed text-muted">
+      No hay nada que instalar: Claude se conecta al servidor desde su propia nube. En el plan
+      gratuito entra un conector personalizado; en cuentas Team o Enterprise lo agrega quien
+      administra la organización.
+    </p>
+    <a
+      href={CLAUDE_DOCS}
+      data-evento="docs_claude"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="inline-flex items-center gap-2 self-start rounded-card border border-line-strong bg-bg px-4 py-2.5 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
+    >
+      Ver el instructivo oficial
+      <span aria-hidden="true" class="text-muted">↗</span>
+    </a>
+  </footer>
+</article>

@@ -1,32 +1,39 @@
 ---
-import type { Cliente } from "../data/content";
+import { organismos } from "../data/content";
 import ConnectButtons from "./ConnectButtons.astro";
+import LogoMarquee from "./LogoMarquee.astro";
+import OrigamiCordoba from "./OrigamiCordoba.astro";
 import ZifosLogo from "./ZifosLogo.astro";
-
-interface Props {
-  clientes: Cliente[];
-}
-
-const { clientes } = Astro.props;
 ---
 
-<section class="shell py-20 text-center sm:py-28">
-  <h1 class="mx-auto max-w-[18ch] text-4xl sm:text-5xl lg:text-6xl">
-    Los datos abiertos de Córdoba, al alcance de tu asistente.
-  </h1>
+<!--
+  El borde inferior lo pone el hero y no la sección que sigue (`ChatShowcase`
+  no lleva `border-t` a propósito): si lo pusieran los dos quedarían dos
+  hairlines pegadas y la costura se vería del doble de gruesa.
+-->
+<section class="relative isolate overflow-hidden border-b border-line">
+  <OrigamiCordoba />
 
-  <p class="mx-auto mt-6 max-w-[56ch] text-lg text-muted">
-    Una fuente de datos unificada y estandarizada para potenciar la riqueza de los datos públicos
-    de Córdoba con la vanguardia en inteligencia artificial.
-  </p>
+  <div class="shell relative py-20 text-center sm:py-28">
+    <h1 class="mx-auto max-w-[18ch] text-4xl sm:text-5xl lg:text-6xl">
+      Los datos abiertos de Córdoba, al alcance de tu agente.
+    </h1>
 
-  <div class="mt-10">
-    <ConnectButtons clientes={clientes} />
+    <p class="mx-auto mt-6 max-w-[56ch] text-lg text-muted">
+      La fuente de datos unificada y estandarizada para potenciar la riqueza de los datos públicos
+      de Córdoba con la vanguardia en inteligencia artificial.
+    </p>
+
+    <div class="mt-10">
+      <ConnectButtons />
+    </div>
+
+    <div class="mt-14 flex items-center justify-center gap-3 sm:mt-16">
+      <span class="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">powered by</span>
+      <span aria-hidden="true" class="h-4 w-px bg-line-strong"></span>
+      <ZifosLogo class="h-5 w-auto" />
+    </div>
   </div>
 
-  <div class="mt-14 flex items-center justify-center gap-3 sm:mt-16">
-    <span class="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">powered by</span>
-    <span aria-hidden="true" class="h-4 w-px bg-line-strong"></span>
-    <ZifosLogo class="h-5 w-auto" />
-  </div>
+  <LogoMarquee organismos={organismos} />
 </section>

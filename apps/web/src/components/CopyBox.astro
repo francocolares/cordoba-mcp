@@ -1,0 +1,80 @@
+---
+import CheckIcon from "./CheckIcon.astro";
+import CopyIcon from "./CopyIcon.astro";
+
+interface Props {
+  id: string;
+  rotulo: string;
+  valor: string;
+  evento: string;
+  etiquetaBoton: string;
+}
+
+const { id, rotulo, valor, evento, etiquetaBoton } = Astro.props;
+---
+
+<div data-copiar-campo class="mx-auto flex max-w-xl flex-col items-center">
+  <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-muted">
+    {rotulo}
+  </span>
+
+  <div
+    class="mt-3 flex w-full items-stretch overflow-hidden rounded-card border border-line-strong bg-surface"
+  >
+    <code
+      id={id}
+      class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-4 py-3.5 text-center font-mono text-sm text-ink"
+      >{valor}</code
+    >
+    <button
+      type="button"
+      data-copiar={id}
+      data-evento={evento}
+      aria-label={etiquetaBoton}
+      class="group relative flex-none cursor-pointer border-l border-line-strong bg-accent px-4 text-jet transition-colors hover:bg-accent-soft"
+    >
+      <CopyIcon class="size-[18px] group-data-[copiado=true]:invisible" />
+      <CheckIcon
+        class="invisible absolute inset-0 m-auto size-[18px] group-data-[copiado=true]:visible"
+      />
+    </button>
+  </div>
+
+  <p
+    data-copiar-aviso
+    role="status"
+    aria-live="polite"
+    class="mt-3 h-4 font-mono text-xs text-muted"
+  >
+  </p>
+</div>
+
+<script>
+  for (const boton of document.querySelectorAll<HTMLButtonElement>("[data-copiar]")) {
+    const aviso = boton
+      .closest<HTMLElement>("[data-copiar-campo]")
+      ?.querySelector<HTMLElement>("[data-copiar-aviso]");
+    let volver: number | undefined;
+
+    boton.addEventListener("click", async () => {
+      const fuente = document.getElementById(boton.dataset.copiar ?? "");
+      if (!fuente) return;
+
+      let copiado = true;
+      try {
+        await navigator.clipboard.writeText(fuente.textContent?.trim() ?? "");
+      } catch {
+        copiado = false;
+      }
+
+      if (copiado) boton.dataset.copiado = "true";
+      if (aviso) aviso.textContent = copiado ? "Copiado" : "No pudimos copiar: copialo a mano";
+
+      window.clearTimeout(volver);
+      volver = window.setTimeout(() => {
+        delete boton.dataset.copiado;
+        if (aviso) aviso.textContent = "";
+      }, 2400);
+    });
+  }
+</script>

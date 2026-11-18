@@ -21,7 +21,7 @@ const pasoCierre = PASO_ITEMS + Math.max(chat.items.length, 2);
 
 <div
   class:list={[
-    "panel col-start-1 row-start-1 px-4 py-5 transition-opacity duration-300 sm:px-5",
+    "panel col-start-1 row-start-1 px-4 py-4 transition-opacity duration-300 sm:px-5 sm:py-5",
     activa ? "listo" : "pointer-events-none opacity-0",
   ]}
   data-panel={conversacion.id}
@@ -78,7 +78,7 @@ const pasoCierre = PASO_ITEMS + Math.max(chat.items.length, 2);
         {
           chat.items.map((item, i) => (
             <li
-              class="paso rounded-xl border border-claude-line bg-claude-surface/50 p-3"
+              class="paso rounded-xl border border-claude-line bg-claude-surface/50 p-2.5 sm:p-3"
               style={`--paso:${PASO_ITEMS + i}`}
             >
               <p class="flex items-baseline justify-between gap-3 font-medium">

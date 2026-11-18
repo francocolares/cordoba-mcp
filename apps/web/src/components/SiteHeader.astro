@@ -1,21 +1,38 @@
 ---
-import { CONTACTO } from "../data/content";
+import { REPO } from "../data/content";
+import BrandIcon from "./BrandIcon.astro";
+import CordobaMark from "./CordobaMark.astro";
+import Seam from "./Seam.astro";
 ---
 
 <header class="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
+  <Seam position="bottom" />
+
   <div class="shell flex h-14 items-center justify-between gap-4">
-    <a href="/" class="font-mono text-sm text-ink no-underline">cordoba-mcp</a>
+    <a href="/" class="group flex items-center gap-2.5 font-mono text-sm text-ink no-underline">
+      <CordobaMark label={null} class="h-5 w-auto text-dove transition-colors group-hover:text-ink" />
+      cordoba-mcp
+    </a>
 
     <nav class="hidden items-center gap-7 text-sm text-muted sm:flex">
       <a href="#conectar" class="no-underline hover:text-ink">Conectar</a>
       <a href="#fuentes" class="no-underline hover:text-ink">Fuentes</a>
+      <a href="#contribuir" class="no-underline hover:text-ink">Contribuir</a>
     </nav>
 
+    <!--
+      Acceso al repo: sin borde ni fondo, con el mismo peso y color que los
+      enlaces de la nav, así se lee como parte del topbar y no como un CTA. El
+      contacto vive en el pie, que es donde están los demás accesos.
+    -->
     <a
-      href={`mailto:${CONTACTO}`}
-      class="inline-flex items-center justify-center rounded-card border border-line-strong bg-surface px-3.5 py-1.5 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
+      href={REPO}
+      target="_blank"
+      rel="noopener noreferrer"
+      class="inline-flex items-center gap-2 text-sm text-muted no-underline transition-colors hover:text-ink"
     >
-      Contacto
+      <BrandIcon name="github-icon" class="size-[18px]" />
+      Repo en GitHub
     </a>
   </div>
 </header>

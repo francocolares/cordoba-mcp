@@ -1,26 +1,136 @@
 ---
+/**
+ * Pie institucional: la marca y lo que es el proyecto a la izquierda, los
+ * accesos a la derecha, y abajo la línea legal fina con la atribución de los
+ * datos y la fecha del último refresco.
+ */
+import { COMUNIDAD, CONTACTO } from "../data/content";
+import BrandIcon from "./BrandIcon.astro";
+import CordobaMark from "./CordobaMark.astro";
+import MailIcon from "./MailIcon.astro";
+import Seam from "./Seam.astro";
+
 interface Props {
   repo: string;
   actualizadoTexto: string;
 }
 
 const { repo, actualizadoTexto } = Astro.props;
+
+const navegar = [
+  { texto: "Conectar", href: "#conectar" },
+  { texto: "Fuentes", href: "#fuentes" },
+  { texto: "Contribuir", href: "#contribuir" },
+];
+
+/**
+ * `icono` identifica la plataforma de cada acceso; el sobre es para el mail.
+ * `evento` es el nombre con el que se mide el click (ver lib/analitica.ts).
+ */
+const proyecto = [
+  {
+    texto: "Repo en GitHub",
+    href: repo,
+    externo: true,
+    icono: "github-icon" as const,
+    evento: "repo",
+  },
+  {
+    texto: "Comunidad en WhatsApp",
+    href: COMUNIDAD,
+    externo: true,
+    icono: "whatsapp-monochrome-icon" as const,
+    evento: "comunidad",
+  },
+  {
+    texto: "Contacto",
+    href: `mailto:${CONTACTO}`,
+    externo: false,
+    icono: "mail" as const,
+    evento: "contacto",
+  },
+];
 ---
 
-<footer class="border-t border-line py-16">
-  <div class="shell">
-    <div class="max-w-3xl space-y-5">
-      <p class="text-sm text-muted">
-        Todo lo que se responde acá sale de datos públicos, y cada fuente dice de quién son: el
-        mérito es del organismo que los publica. Este proyecto los ordena, los corrige cuando vienen
-        sucios y los vuelve a publicar, sin cambiarles el contenido. Si algo está mal en el origen,
-        va a estar mal acá.
+<footer class="relative mt-8 border-t border-line">
+  <Seam tono="acento" />
+
+  <div class="shell py-14 sm:py-16">
+    <div class="grid gap-12 md:grid-cols-[minmax(0,1fr)_auto] md:gap-16">
+      <div class="max-w-[46ch]">
+        <div class="flex items-center gap-3.5">
+          <CordobaMark label={null} class="h-9 w-auto text-dove" />
+          <div class="leading-tight">
+            <p class="font-mono text-sm text-ink">cordoba-mcp</p>
+            <p class="text-[11px] uppercase tracking-[0.18em] text-muted">Córdoba, Argentina</p>
+          </div>
+        </div>
+
+        <p class="mt-6 text-sm leading-relaxed text-body">
+          La fuente de datos <strong class="font-medium text-ink">unificada y estandarizada</strong>
+          para potenciar la riqueza de los datos públicos de Córdoba con la vanguardia en
+          inteligencia artificial.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-10 text-sm sm:gap-16 md:gap-20">
+        <nav aria-label="Secciones">
+          <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted">Sitio</p>
+          <ul class="mt-4 space-y-2.5">
+            {
+              navegar.map((enlace) => (
+                <li>
+                  <a href={enlace.href} class="text-body no-underline hover:text-ink">
+                    {enlace.texto}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </nav>
+
+        <nav aria-label="Proyecto">
+          <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-muted">Proyecto</p>
+          <ul class="mt-4 space-y-2.5">
+            {
+              proyecto.map((enlace) => (
+                <li>
+                  <a
+                    href={enlace.href}
+                    data-evento={enlace.evento}
+                    target={enlace.externo ? "_blank" : undefined}
+                    rel={enlace.externo ? "noopener noreferrer" : undefined}
+                    class="group inline-flex items-center gap-2.5 text-body no-underline hover:text-ink"
+                  >
+                    {enlace.icono === "mail" ? (
+                      <MailIcon class="size-4 text-muted transition-colors group-hover:text-ink" />
+                    ) : (
+                      <BrandIcon
+                        name={enlace.icono}
+                        class="size-4 text-muted transition-colors group-hover:text-ink"
+                      />
+                    )}
+                    {enlace.texto}
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+        </nav>
+      </div>
+    </div>
+
+    <div class="mt-12 border-t border-line pt-8">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between">
+        <p class="text-xs text-muted">Hecho en la República de Córdoba.</p>
+        <p class="font-mono text-xs text-muted">Datos actualizados el {actualizadoTexto}</p>
+      </div>
+
+      <p class="mt-5 max-w-[74ch] text-xs leading-relaxed text-muted/80">
+        Los datos son públicos y cada respuesta declara su fuente: el mérito es del organismo que
+        los publica. Este proyecto los ordena, los corrige y los vuelve a publicar, sin cambiarles
+        el contenido.
       </p>
-      <p class="text-sm text-muted">
-        Hecho en Córdoba, con el código a la vista en <a href={repo}>GitHub</a>. Los horarios son
-        los de acá, todo el año.
-      </p>
-      <p class="font-mono text-xs text-muted">Datos actualizados el {actualizadoTexto}</p>
     </div>
   </div>
 </footer>

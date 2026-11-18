@@ -1,0 +1,36 @@
+---
+/**
+ * La costura entre bloques: sobre la hairline de `border-line`, un resplandor
+ * que se apaga hacia los costados. Estaba suelta en el pie; vive acá para que el
+ * topbar, el cierre del hero y el pie usen exactamente el mismo gesto y las tres
+ * coincidan.
+ *
+ * El bloque que la usa tiene que estar posicionado (`relative`, `sticky`, …) y
+ * poner su propio `border-t` / `border-b border-line`: esto es sólo el
+ * resplandor que va encima de ese borde.
+ */
+interface Props {
+  /** Sobre qué borde del bloque se apoya. */
+  position?: "top" | "bottom";
+  /**
+   * El acento se reserva para el pie, que es el cierre de la página. Las demás
+   * costuras van en blanco: marcan la estructura sin pedir atención ni repetir
+   * el naranja tres veces en la misma pantalla.
+   */
+  tono?: "blanco" | "acento";
+  class?: string;
+}
+
+const { position = "top", tono = "blanco", class: extra = "" } = Astro.props;
+---
+
+<div
+  aria-hidden="true"
+  class:list={[
+    "pointer-events-none absolute inset-x-0 h-px bg-gradient-to-r from-transparent to-transparent",
+    tono === "acento" ? "via-accent/40" : "via-dove/40",
+    position === "top" ? "top-0" : "bottom-0",
+    extra,
+  ]}
+>
+</div>

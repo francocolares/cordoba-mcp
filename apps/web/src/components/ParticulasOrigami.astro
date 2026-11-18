@@ -1,0 +1,105 @@
+---
+import { ORIGAMI_FUENTE_VIEWBOX, origamiPorFuente } from "../data/origamisFuente";
+import { enjambre } from "../data/particulas";
+
+interface Props {
+  ids: string[];
+}
+
+const { ids } = Astro.props;
+
+const vista = `0 0 ${ORIGAMI_FUENTE_VIEWBOX.width} ${ORIGAMI_FUENTE_VIEWBOX.height}`;
+---
+
+<div class="particulas" data-particulas aria-hidden="true">
+  <svg class="sello" viewBox={vista} aria-hidden="true">
+    {
+      ids.map((id) => (
+        <symbol id={`origami-${id}`} viewBox={vista}>
+          {origamiPorFuente[id].map((p) => (
+            <polygon
+              points={p.points}
+              fill="currentColor"
+              opacity={p.opacity}
+              stroke="currentColor"
+              stroke-width="0.5"
+              stroke-opacity="0.35"
+              stroke-linejoin="round"
+            />
+          ))}
+        </symbol>
+      ))
+    }
+  </svg>
+
+  {
+    ids.map((id, i) => (
+      <div class:list={["enjambre", i === 0 && "visible"]} data-enjambre={id}>
+        {enjambre(i).map((p) => (
+          <svg
+            class="particula"
+            viewBox={vista}
+            style={`--x:${p.x}%; --y:${p.y}%; --tam:${p.tam}rem; --prof:${p.prof}; --giro:${p.giro}deg; --luz:${p.luz}`}
+          >
+            <use href={`#origami-${id}`} />
+          </svg>
+        ))}
+      </div>
+    ))
+  }
+</div>
+
+<style>
+  .particulas {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .particulas.activo {
+    opacity: 0.5;
+  }
+
+  .sello {
+    position: absolute;
+    width: 0;
+    height: 0;
+  }
+
+  .enjambre {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 280ms ease-out;
+  }
+
+  .enjambre.visible {
+    opacity: 1;
+    transition: opacity 760ms cubic-bezier(0.22, 1, 0.36, 1) 140ms;
+  }
+
+  .particula {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    display: block;
+    width: var(--tam);
+    height: var(--tam);
+    opacity: var(--luz);
+    transform: translate(-50%, -50%)
+      translate(
+        calc(var(--mx, 0) * var(--prof) * 18px),
+        calc(var(--my, 0) * var(--prof) * 14px + var(--avance, 0) * var(--prof) * -3.5rem)
+      )
+      rotate(calc(var(--giro) + var(--avance, 0) * var(--prof) * 10deg));
+    transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .particula {
+      transform: translate(-50%, -50%) rotate(var(--giro));
+      transition: none;
+    }
+  }
+</style>

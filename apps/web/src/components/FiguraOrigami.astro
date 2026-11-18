@@ -1,0 +1,56 @@
+---
+import { ORIGAMI_FUENTE_VIEWBOX, origamiPorFuente } from "../data/origamisFuente";
+
+interface Props {
+  id: string;
+  class?: string;
+}
+
+const { id, class: extra = "" } = Astro.props;
+
+const planos = origamiPorFuente[id];
+if (!planos) throw new Error(`No hay figura origami para la fuente "${id}"`);
+---
+
+<svg
+  class:list={["figura", extra]}
+  viewBox={`0 0 ${ORIGAMI_FUENTE_VIEWBOX.width} ${ORIGAMI_FUENTE_VIEWBOX.height}`}
+  preserveAspectRatio="xMidYMid meet"
+  aria-hidden="true"
+>
+  {
+    planos.map((p) => (
+      <polygon
+        points={p.points}
+        fill="currentColor"
+        opacity={p.opacity}
+        stroke="currentColor"
+        stroke-width="0.5"
+        stroke-opacity="0.35"
+        stroke-linejoin="round"
+        style={`--d:${p.d}`}
+      />
+    ))
+  }
+</svg>
+
+<style>
+  .figura {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .figura polygon {
+    transform: translate(
+      calc(var(--avance, 0) * var(--d, 1) * var(--pliegue, 1) * 0.9px),
+      calc(var(--avance, 0) * var(--d, 1) * var(--pliegue, 1) * -2.4px)
+    );
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .figura polygon {
+      transform: none;
+    }
+  }
+</style>

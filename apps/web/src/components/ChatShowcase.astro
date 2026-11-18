@@ -2,6 +2,8 @@
 import type { Conversacion } from "../data/conversaciones";
 import BrandIcon from "./BrandIcon.astro";
 import ChatPanel from "./ChatPanel.astro";
+import OrigamiFuente from "./OrigamiFuente.astro";
+import ParticulasOrigami from "./ParticulasOrigami.astro";
 import WrenchIcon from "./WrenchIcon.astro";
 
 interface Props {
@@ -14,7 +16,15 @@ const { conversaciones } = Astro.props;
 const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
 ---
 
-<section id="demo" class="border-t border-line py-20 sm:py-28">
+<!-- Sin `border-t`: la costura de arriba es la que cierra el hero (ver Hero.astro). -->
+<section id="demo" class="py-20 sm:py-28">
+  <!--
+    Sonda de alto: mide 100svh (la ventana con las barras del navegador a la
+    vista) sin participar del layout. El script la usa para que el gadget
+    entre en la pantalla del celular.
+  -->
+  <div data-sonda aria-hidden="true" class="pointer-events-none invisible fixed top-0 left-0 h-[100svh] w-0"></div>
+
   <div class="shell">
     <h2 class="mx-auto max-w-[24ch] text-center text-3xl sm:text-4xl lg:text-5xl">
       Conversá con Córdoba, como lo harías con un amigo
@@ -28,13 +38,33 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
       <div class="col-start-1 row-start-1" aria-hidden="true">
         {
           conversaciones.map((c) => (
-            <div class="h-[44vh] lg:h-[52vh]" data-etapa={c.id} />
+            <div class="h-[44svh] lg:h-[52vh]" data-etapa={c.id} />
           ))
         }
       </div>
 
+      <div class="col-start-1 row-start-1 min-w-0" aria-hidden="true">
+        <div class="sticky top-[4.5rem] lg:top-28">
+          <div class="telon mx-auto h-[min(42rem,82svh)] w-full" data-telon>
+            <ParticulasOrigami ids={conversaciones.map((c) => c.id)} />
+
+            <div class="figuras absolute inset-x-0 top-1/2 h-[min(34rem,68svh)] -translate-y-1/2">
+              {
+                conversaciones.map((c, i) => (
+                  <OrigamiFuente
+                    id={c.id}
+                    lado={i % 2 === 0 ? "derecha" : "izquierda"}
+                    visible={i === 0}
+                  />
+                ))
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="col-start-1 row-start-1 z-10 min-w-0">
-        <div class="sticky top-20 mx-auto w-full max-w-xl lg:top-28">
+        <div class="sticky top-[4.5rem] mx-auto w-full max-w-xl lg:top-28" data-gadget>
           <div
             class="pestanas -mx-5 overflow-x-auto px-5 pb-4 sm:mx-0 sm:px-0"
             data-pestanas
@@ -74,7 +104,7 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
             class="chat overflow-hidden rounded-card border border-claude-line bg-claude-bg text-claude-text shadow-2xl shadow-black/50"
             data-chat
           >
-            <div class="flex items-center gap-2 border-b border-claude-line px-4 py-3">
+            <div class="flex items-center gap-2 border-b border-claude-line px-4 py-2.5 sm:py-3">
               <BrandIcon name="claude-icon" class="size-4 text-claude-accent" />
               <span class="text-sm text-claude-muted">Claude</span>
 
@@ -107,6 +137,33 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
   </div>
 </section>
 
+<style>
+  .telon {
+    display: none;
+    position: relative;
+    overflow: clip;
+    color: color-mix(in oklab, var(--color-accent) 42%, var(--color-fog));
+  }
+
+  .figuras {
+    overflow: clip;
+    opacity: 0.22;
+    mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+  }
+
+  @media (min-width: 640px) {
+    .telon {
+      display: block;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .figuras {
+      opacity: 0.28;
+    }
+  }
+</style>
+
 <script>
   import {
     elegirEventos,
@@ -130,7 +187,105 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
   const chipAndando = document.querySelector<HTMLElement>("[data-andando]");
   const enObra = new Set((chipObra?.dataset.enObra ?? "").split(" ").filter(Boolean));
 
+  const fondos = new Map(
+    [...document.querySelectorAll<HTMLElement>("[data-fondo]")].map((f) => [f.dataset.fondo, f]),
+  );
+  const telon = document.querySelector<HTMLElement>("[data-telon]");
+  const particulas = document.querySelector<HTMLElement>("[data-particulas]");
+  const enjambres = new Map(
+    [...document.querySelectorAll<HTMLElement>("[data-enjambre]")].map((e) => [e.dataset.enjambre, e]),
+  );
+
+  const sonda = document.querySelector<HTMLElement>("[data-sonda]");
+  const gadget = document.querySelector<HTMLElement>("[data-gadget]");
+
+  /** Lo más chico que lo achicamos: por debajo preferimos que sobre un pelito. */
+  const ESCALA_MINIMA = 0.72;
+
+  /*
+   * El gadget es pegajoso: si mide más que la pantalla, el celular lo muestra
+   * cortado. Medimos con 100svh —la ventana chica, con las barras del
+   * navegador a la vista— para que el alto no cambie mientras se scrollea, y
+   * si no entra lo achicamos con `zoom`, que encoge el layout de verdad: así
+   * el bloque pegajoso termina midiendo lo mismo que se ve.
+   */
+  function ajustarAlto() {
+    if (!chat || !gadget) return;
+
+    chat.style.zoom = "";
+    const alto = sonda?.offsetHeight || window.innerHeight;
+    const tope = Number.parseFloat(getComputedStyle(gadget).top) || 0;
+    const disponible = alto - tope - (barra?.offsetHeight ?? 0) - 16;
+    const natural = chat.offsetHeight;
+    if (!natural || disponible <= 0) return;
+
+    const escala = Math.max(ESCALA_MINIMA, Math.min(1, disponible / natural));
+    if (escala < 0.995) chat.style.zoom = escala.toFixed(3);
+  }
+
+  let pendiente = 0;
+  function pedirAjuste() {
+    if (pendiente) return;
+    pendiente = requestAnimationFrame(() => {
+      pendiente = 0;
+      ajustarAlto();
+    });
+  }
+
+  ajustarAlto();
+  window.addEventListener("resize", pedirAjuste);
+  window.addEventListener("orientationchange", pedirAjuste);
+  document.fonts?.ready.then(ajustarAlto);
+
   let visible: string | null = null;
+
+  let frameDeriva = 0;
+
+  function pintarDeriva() {
+    frameDeriva = 0;
+    const etapa = etapas.find((e) => e.dataset.etapa === visible);
+    if (!telon || !etapa) return;
+
+    const caja = etapa.getBoundingClientRect();
+    const medio = window.innerHeight / 2;
+    const avance = Math.max(-1, Math.min(1, (caja.top + caja.height / 2 - medio) / medio));
+    telon.style.setProperty("--avance", avance.toFixed(3));
+  }
+
+  function pedirDeriva() {
+    if (!frameDeriva) frameDeriva = requestAnimationFrame(pintarDeriva);
+  }
+
+  window.addEventListener("scroll", pedirDeriva, { passive: true });
+  window.addEventListener("resize", pedirDeriva);
+  pedirDeriva();
+
+  const seccion = document.querySelector<HTMLElement>("#demo");
+  const quieto = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  if (seccion && telon) {
+    seccion.addEventListener(
+      "pointermove",
+      (evento) => {
+        if (quieto.matches || evento.pointerType !== "mouse") return;
+        const caja = telon.getBoundingClientRect();
+        const mx = ((evento.clientX - caja.left) / caja.width) * 2 - 1;
+        const my = ((evento.clientY - caja.top) / caja.height) * 2 - 1;
+        telon.style.setProperty("--mx", mx.toFixed(3));
+        telon.style.setProperty("--my", my.toFixed(3));
+      },
+      { passive: true },
+    );
+
+    seccion.addEventListener(
+      "pointerleave",
+      () => {
+        telon.style.setProperty("--mx", "0");
+        telon.style.setProperty("--my", "0");
+      },
+      { passive: true },
+    );
+  }
 
   function mostrar(id: string) {
     if (id === visible) return;
@@ -152,6 +307,16 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
     for (const [clave, boton] of pestanas) {
       boton.setAttribute("aria-selected", clave === id ? "true" : "false");
     }
+
+    for (const [clave, fondo] of fondos) {
+      fondo.classList.toggle("visible", clave === id);
+    }
+
+    for (const [clave, grupo] of enjambres) {
+      grupo.classList.toggle("visible", clave === id);
+    }
+
+    pedirDeriva();
 
     /* En pantallas chicas la pestaña activa se trae al centro de su carril. */
     const activa = pestanas.get(id);
@@ -184,6 +349,7 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
 
       /* El gadget se enciende sólo mientras hay una etapa en la franja. */
       chat.classList.toggle("activo", cruzando.size > 0);
+      particulas?.classList.toggle("activo", cruzando.size > 0);
 
       const primera = etapas.find((e) => e.dataset.etapa && cruzando.has(e.dataset.etapa));
       if (primera?.dataset.etapa) mostrar(primera.dataset.etapa);
@@ -242,11 +408,12 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
 
     const base = Number(lista.dataset.pasoBase ?? "3");
     lista.replaceChildren(...items.map((item, i) => nodoItem(item, base + i)));
+    pedirAjuste();
   }
 
   function nodoItem(item: ItemChat, paso: number): HTMLLIElement {
     const li = document.createElement("li");
-    li.className = "paso rounded-xl border border-claude-line bg-claude-surface/50 p-3";
+    li.className = "paso rounded-xl border border-claude-line bg-claude-surface/50 p-2.5 sm:p-3";
     li.style.setProperty("--paso", String(paso));
 
     const cabeza = document.createElement("p");
@@ -304,6 +471,7 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
 
     const base = Number(lista.dataset.pasoBase ?? "3");
     lista.replaceChildren(...guardia.items.map((item, i) => nodoItem(item, base + i)));
+    pedirAjuste();
   }
 
   refrescarAgenda();

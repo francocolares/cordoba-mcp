@@ -3,15 +3,17 @@ interface Props {
   id: string;
   titulo: string;
   lede?: string;
+  /** Centra el encabezado; lo usa la sección de conexión, que es una sola columna. */
+  centrado?: boolean;
   class?: string;
 }
 
-const { id, titulo, lede, class: extra = "" } = Astro.props;
+const { id, titulo, lede, centrado = false, class: extra = "" } = Astro.props;
 ---
 
 <section id={id} class:list={["border-t border-line py-20 sm:py-28", extra]}>
   <div class="shell">
-    <header class="max-w-2xl">
+    <header class:list={["max-w-2xl", centrado && "mx-auto text-center"]}>
       <h2 class="text-3xl sm:text-4xl lg:text-5xl">{titulo}</h2>
       {lede && <p class="mt-5 text-base text-muted sm:text-lg">{lede}</p>}
     </header>

@@ -1,34 +1,26 @@
 ---
-import type { Cliente } from "../data/content";
-import { DISCORD } from "../data/content";
+import { COMUNIDAD } from "../data/content";
 import BrandIcon from "./BrandIcon.astro";
-
-interface Props {
-  clientes: Cliente[];
-}
-
-const { clientes } = Astro.props;
-
-/** En esta etapa el hero empuja solo a Claude; el resto vive en #conectar. */
-const principal = clientes.find((c) => c.id === "claude") ?? clientes[0];
 ---
 
 <div class="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
   <a
-    href={`#${principal.id}`}
+    href="#conectar"
+    data-evento="conectar_claude"
     class="inline-flex items-center justify-center gap-2.5 rounded-card bg-ink px-5 py-3 text-sm font-medium text-jet no-underline transition-colors hover:bg-dove"
   >
-    <BrandIcon name={principal.icono} class="size-[18px]" />
-    Conectar con {principal.nombre}
+    <BrandIcon name="claude-icon" class="size-[18px]" />
+    Conectar con Claude
   </a>
 
   <a
-    href={DISCORD}
+    href={COMUNIDAD}
+    data-evento="comunidad"
     target="_blank"
     rel="noopener noreferrer"
     class="inline-flex items-center justify-center gap-2.5 rounded-card border border-line-strong bg-surface px-5 py-3 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
   >
-    <BrandIcon name="discord-icon" class="size-[18px]" />
+    <BrandIcon name="whatsapp-monochrome-icon" class="size-[18px]" />
     Unirse a la comunidad
   </a>
 </div>

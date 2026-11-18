@@ -1,0 +1,427 @@
+---
+import { planosIsotipo, planosIsotipoMono } from "../data/isotipo";
+import { capasPliegue, PLIEGUES_VIEWBOX, profundidad } from "../data/pliegues";
+
+interface Props {
+  class?: string;
+}
+
+const { class: extra = "" } = Astro.props;
+
+const vistaCampo = `0 0 ${PLIEGUES_VIEWBOX.width} ${PLIEGUES_VIEWBOX.height}`;
+const planosSello = planosIsotipo.map((plano, i) => ({
+  points: plano.points,
+  d: plano.d,
+  opacity: planosIsotipoMono[i].opacity,
+}));
+---
+
+<div class:list={["origami", extra]} aria-hidden="true" data-origami>
+  <div class="rescoldo"></div>
+  <div class="brasa" data-brasa></div>
+
+  <svg class="campo" viewBox={vistaCampo} preserveAspectRatio="none" data-campo>
+    <defs>
+      <radialGradient
+        id="luz-campo"
+        gradientUnits="userSpaceOnUse"
+        cx="88"
+        cy="30"
+        r="22"
+        data-luz-campo
+      >
+        <stop offset="0" stop-color="#fff" stop-opacity="0.9"></stop>
+        <stop offset="0.35" stop-color="#fff" stop-opacity="0.34"></stop>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"></stop>
+      </radialGradient>
+
+      <mask id="mascara-campo" maskUnits="userSpaceOnUse">
+        <rect
+          x="-20"
+          y="-20"
+          width={PLIEGUES_VIEWBOX.width + 40}
+          height={PLIEGUES_VIEWBOX.height + 40}
+          fill="url(#luz-campo)"></rect>
+      </mask>
+
+      <g id="capas-campo">
+        {
+          capasPliegue.map((facetas, capa) => (
+            <g class="capa" data-capa={capa} style={`--prof:${profundidad(capa)}`}>
+              {facetas.map((faceta) => (
+                <polygon
+                  points={faceta.points}
+                  fill="currentColor"
+                  fill-opacity={faceta.luz.toFixed(2)}
+                  stroke="currentColor"
+                  stroke-linejoin="round"
+                  vector-effect="non-scaling-stroke"
+                />
+              ))}
+            </g>
+          ))
+        }
+      </g>
+    </defs>
+
+    <use href="#capas-campo" class="capas-frio"></use>
+    <use href="#capas-campo" class="capas-brasa" mask="url(#mascara-campo)"></use>
+  </svg>
+
+  <svg
+    class="sello"
+    viewBox="-6 -6 76 112"
+    preserveAspectRatio="xMidYMid meet"
+    data-sello
+  >
+    <defs>
+      <radialGradient
+        id="luz-sello"
+        gradientUnits="userSpaceOnUse"
+        cx="56"
+        cy="24"
+        r="34"
+        data-luz-sello
+      >
+        <stop offset="0" stop-color="#fff" stop-opacity="0.85"></stop>
+        <stop offset="0.4" stop-color="#fff" stop-opacity="0.3"></stop>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"></stop>
+      </radialGradient>
+
+      <mask id="mascara-sello" maskUnits="userSpaceOnUse">
+        <rect x="-40" y="-40" width="160" height="200" fill="url(#luz-sello)"></rect>
+      </mask>
+
+      <g id="planos-sello" data-sello-planos>
+        {
+          planosSello.map((plano) => (
+            <polygon
+              points={plano.points}
+              fill="currentColor"
+              fill-opacity={plano.opacity}
+              stroke="currentColor"
+              stroke-width="0.3"
+              stroke-linejoin="round"
+              data-d={plano.d}
+            />
+          ))
+        }
+      </g>
+    </defs>
+
+    <use href="#planos-sello" class="sello-papel"></use>
+    <use href="#planos-sello" class="sello-brasa" mask="url(#mascara-sello)"></use>
+  </svg>
+</div>
+
+<style>
+  .origami {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    mask-image: radial-gradient(
+        ellipse 54% 58% at 50% 44%,
+        rgba(0, 0, 0, 0.1) 0%,
+        rgba(0, 0, 0, 0.45) 56%,
+        rgba(0, 0, 0, 1) 100%
+      ),
+      linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 9%, rgba(0, 0, 0, 1) 72%, rgba(0, 0, 0, 0) 98%);
+    mask-composite: intersect;
+    -webkit-mask-composite: source-in;
+    transition: opacity 420ms ease-out;
+  }
+
+  .rescoldo {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      165deg,
+      color-mix(in oklab, var(--color-charcoal) 45%, var(--color-jet)),
+      var(--color-jet) 58%
+    );
+  }
+
+  .brasa {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 22rem;
+    height: 22rem;
+    margin: -11rem 0 0 -11rem;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklab, var(--color-accent) 30%, transparent) 0%,
+      color-mix(in oklab, var(--color-accent) 7%, transparent) 44%,
+      rgba(0, 0, 0, 0) 70%
+    );
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    opacity: 0.07;
+    transition: opacity 700ms ease-out;
+    transform: translate3d(28%, -26%, 0);
+    will-change: transform;
+  }
+
+  .campo {
+    position: absolute;
+    inset: -4%;
+    width: 108%;
+    height: 108%;
+    overflow: visible;
+  }
+
+  .capa {
+    will-change: transform;
+  }
+
+  .capas-frio {
+    color: #1b1e23;
+    stroke-width: 0.5;
+    stroke-opacity: 0.14;
+  }
+
+  .capas-brasa {
+    color: var(--color-accent);
+    stroke: var(--color-accent-soft);
+    stroke-width: 0.7;
+    stroke-opacity: 0.5;
+    opacity: 0.12;
+    transition: opacity 700ms ease-out;
+    mix-blend-mode: screen;
+  }
+
+  .sello {
+    position: absolute;
+    top: -12%;
+    right: -4%;
+    height: 124%;
+    width: auto;
+    overflow: visible;
+    filter: drop-shadow(0 28px 56px rgba(0, 0, 0, 0.6));
+    will-change: transform;
+  }
+
+  .sello-papel {
+    color: #3a3530;
+    stroke-opacity: 0.6;
+  }
+
+  .sello-brasa {
+    color: var(--color-accent);
+    stroke: var(--color-accent-soft);
+    stroke-opacity: 0.45;
+    mix-blend-mode: screen;
+    opacity: 0.1;
+    transition: opacity 700ms ease-out;
+  }
+
+  .origami.encendido .brasa {
+    opacity: 0.22;
+  }
+
+  .origami.encendido .capas-brasa {
+    opacity: 0.4;
+  }
+
+  .origami.encendido .sello-brasa {
+    opacity: 0.26;
+  }
+
+  body:has([data-zifos]:hover) .origami,
+  body:has([data-zifos]:focus-visible) .origami {
+    opacity: 0.12;
+  }
+
+  @media (hover: none), (max-width: 640px) {
+    .origami {
+      mask-image: radial-gradient(
+          ellipse 76% 52% at 50% 42%,
+          rgba(0, 0, 0, 0.14) 0%,
+          rgba(0, 0, 0, 0.5) 58%,
+          rgba(0, 0, 0, 1) 100%
+        ),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 1) 10%, rgba(0, 0, 0, 1) 74%, rgba(0, 0, 0, 0) 98%);
+    }
+
+    .capas-brasa,
+    .brasa {
+      animation: deriva 22s ease-in-out infinite alternate;
+    }
+
+    .brasa {
+      width: 18rem;
+      height: 18rem;
+      margin: -9rem 0 0 -9rem;
+      opacity: 0.14;
+    }
+
+    .sello {
+      top: 2%;
+      right: -26%;
+      height: 92%;
+      opacity: 0.8;
+    }
+  }
+
+  @keyframes deriva {
+    from {
+      transform: translate3d(14%, -18%, 0);
+    }
+    to {
+      transform: translate3d(-10%, 10%, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .capa,
+    [data-sello-planos] polygon,
+    .brasa,
+    .capas-brasa,
+    .sello {
+      animation: none;
+      transition: none;
+      transform: translate3d(18%, -16%, 0);
+    }
+
+    .capa,
+    [data-sello-planos] polygon,
+    .capas-brasa,
+    .sello {
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  const PERDIDA = 0.085;
+  const AMPLITUD = 3.4;
+  const GIRO = 1.6;
+  const DERIVA = 0.0001;
+
+  type Destino = { x: number; y: number; luzX: number; luzY: number };
+
+  function montar(raiz: HTMLElement) {
+    const lienzoCampo = raiz.querySelector<SVGSVGElement>("[data-campo]");
+    const lienzoSello = raiz.querySelector<SVGSVGElement>("[data-sello]");
+    const gradienteCampo = raiz.querySelector<SVGRadialGradientElement>("[data-luz-campo]");
+    const gradienteSello = raiz.querySelector<SVGRadialGradientElement>("[data-luz-sello]");
+    const halo = raiz.querySelector<HTMLElement>("[data-brasa]");
+    if (!lienzoCampo || !lienzoSello || !gradienteCampo || !gradienteSello || !halo) return;
+
+    const campo = lienzoCampo;
+    const sello = lienzoSello;
+    const luzCampo = gradienteCampo;
+    const luzSello = gradienteSello;
+    const brasa = halo;
+
+    const quieto = matchMedia("(prefers-reduced-motion: reduce)");
+    const finos = matchMedia("(hover: hover) and (pointer: fine)");
+    if (quieto.matches || !finos.matches) return;
+
+    const zona = raiz.parentElement ?? raiz;
+    const capas = [...campo.querySelectorAll<SVGGElement>(".capa")].map((nodo) => ({
+      nodo,
+      prof: Number(getComputedStyle(nodo).getPropertyValue("--prof")) || 1,
+    }));
+    const planos = [...sello.querySelectorAll<SVGPolygonElement>("[data-sello-planos] polygon")].map(
+      (nodo) => ({ nodo, d: Number(nodo.dataset.d ?? 1) }),
+    );
+    const caja = campo.viewBox.baseVal;
+
+    const destino: Destino = { x: 0, y: 0, luzX: caja.width * 0.74, luzY: caja.height * 0.3 };
+    const suave: Destino = { ...destino };
+    let siguiendo = false;
+    let frame = 0;
+    let visible = true;
+
+    function respirar(ahora: number) {
+      const a = ahora * DERIVA;
+      destino.x = Math.sin(a) * 0.45;
+      destino.y = Math.sin(a * 1.37 + 1.1) * 0.35;
+      destino.luzX = caja.width * (0.5 + Math.sin(a * 0.83) * 0.34);
+      destino.luzY = caja.height * (0.42 + Math.sin(a * 1.21 + 0.6) * 0.3);
+    }
+
+    function pintar(ahora: number) {
+      frame = 0;
+      if (!siguiendo) respirar(ahora);
+
+      for (const clave of ["x", "y", "luzX", "luzY"] as const) {
+        suave[clave] += (destino[clave] - suave[clave]) * PERDIDA;
+      }
+
+      for (const { nodo, prof } of capas) {
+        const dx = (suave.x * AMPLITUD * prof).toFixed(3);
+        const dy = (suave.y * AMPLITUD * prof * 0.72).toFixed(3);
+        nodo.setAttribute("transform", `translate(${dx} ${dy})`);
+      }
+
+      for (const { nodo, d } of planos) {
+        const dx = (suave.x * AMPLITUD * d * 0.9).toFixed(3);
+        const dy = (suave.y * AMPLITUD * d * 0.6).toFixed(3);
+        nodo.setAttribute("transform", `translate(${dx} ${dy})`);
+      }
+
+      sello.style.transform = `rotate(${(suave.x * GIRO).toFixed(3)}deg)`;
+
+      luzCampo.setAttribute("cx", suave.luzX.toFixed(2));
+      luzCampo.setAttribute("cy", suave.luzY.toFixed(2));
+
+      const selloX = -14 + (suave.luzX / caja.width) * 110;
+      const selloY = -10 + (suave.luzY / caja.height) * 120;
+      luzSello.setAttribute("cx", selloX.toFixed(2));
+      luzSello.setAttribute("cy", selloY.toFixed(2));
+
+      brasa.style.transform = `translate3d(${((suave.luzX / caja.width - 0.5) * 128).toFixed(2)}%, ${(
+        (suave.luzY / caja.height - 0.5) *
+        118
+      ).toFixed(2)}%, 0)`;
+
+      const moviendose =
+        (["x", "y"] as const).some((c) => Math.abs(destino[c] - suave[c]) > 0.0015) ||
+        (["luzX", "luzY"] as const).some((c) => Math.abs(destino[c] - suave[c]) > 0.02);
+      if (!siguiendo || moviendose) pedirFrame();
+    }
+
+    function pedirFrame() {
+      if (!frame && visible) frame = requestAnimationFrame(pintar);
+    }
+
+    function mover(evento: PointerEvent) {
+      const marco = zona.getBoundingClientRect();
+      const fx = (evento.clientX - marco.left) / marco.width;
+      const fy = (evento.clientY - marco.top) / marco.height;
+      destino.x = fx * 2 - 1;
+      destino.y = fy * 2 - 1;
+      destino.luzX = fx * caja.width;
+      destino.luzY = fy * caja.height;
+      siguiendo = true;
+      raiz.classList.add("encendido");
+      pedirFrame();
+    }
+
+    function soltar() {
+      siguiendo = false;
+      raiz.classList.remove("encendido");
+      pedirFrame();
+    }
+
+    const mirilla = new IntersectionObserver(([entrada]) => {
+      visible = entrada.isIntersecting;
+      if (visible) pedirFrame();
+      else if (frame) {
+        cancelAnimationFrame(frame);
+        frame = 0;
+      }
+    });
+    mirilla.observe(raiz);
+
+    zona.addEventListener("pointermove", mover, { passive: true });
+    zona.addEventListener("pointerleave", soltar, { passive: true });
+
+    pedirFrame();
+  }
+
+  for (const raiz of document.querySelectorAll<HTMLElement>("[data-origami]")) montar(raiz);
+</script>

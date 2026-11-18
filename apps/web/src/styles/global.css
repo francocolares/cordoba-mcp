@@ -1,9 +1,18 @@
 @import "tailwindcss";
 
 /*
- * Tokens tomados del sistema de diseño de x.ai (hsl -> hex):
+ * Los neutros salen del sistema de diseño de x.ai (hsl -> hex):
  * jet 0 0% 4% · charcoal 0 0% 10% · umbra 221 12% 14% · steel 216 4% 22%
- * fog 216 4% 51% · dove 222 19% 86% · sunset 22 100% 51.6% · dawn 37 100% 76%
+ * fog 216 4% 51% · dove 222 19% 86%
+ *
+ * El acento es propio: el fuego de Zifos, un bermellón (ember 8 100% 100%) en
+ * lugar del naranja de x.ai. El corrimiento hacia el rojo no es estético: el
+ * naranja quedaba a 19° del ámbar de aviso y en la grilla de fuentes los dos
+ * se confundían. Desde el bermellón hay 33°, que ya se leen como dos colores.
+ *
+ * Sigue cerca del terracota de la interfaz de Claude (15°), pero ahí los
+ * separa la saturación: 87 contra 60. El acento es brasa, el terracota es
+ * tierra, y no compiten aunque compartan el matiz.
  */
 @theme {
   --color-jet: #0a0a0a;
@@ -13,8 +22,8 @@
   --color-fog: #7d8187;
   --color-dove: #d5d9e2;
   --color-ivory: #f9f8f6;
-  --color-sunset: #ff6308;
-  --color-dawn: #ffd085;
+  --color-ember: #ff3d20;
+  --color-spark: #ffae94;
 
   /* Roles semánticos */
   --color-bg: var(--color-jet);
@@ -24,8 +33,8 @@
   --color-ink: #ffffff;
   --color-body: var(--color-dove);
   --color-muted: var(--color-fog);
-  --color-accent: var(--color-sunset);
-  --color-accent-soft: var(--color-dawn);
+  --color-accent: var(--color-ember);
+  --color-accent-soft: var(--color-spark);
 
   /* Verde "ya anda": distingue lo que el MCP contesta de lo que falta. */
   --color-live: #3fd47f;
@@ -151,7 +160,7 @@
 /* Lo que ya contesta: acento verde, encendido incluso sin estar elegido. */
 .pestana-live {
   border-color: color-mix(in oklab, var(--color-live) 45%, transparent);
-  background: color-mix(in oklab, var(--color-live) 12%, transparent);
+  background: color-mix(in oklab, var(--color-live) 12%, var(--color-bg));
   color: var(--color-live-soft);
 }
 
@@ -164,7 +173,7 @@
 /* Lo pendiente: borde cortado y la llave de herramienta como seña. */
 .pestana-obra {
   border-style: dashed;
-  background: transparent;
+  background: var(--color-bg);
 }
 
 .pestana-obra[aria-selected="true"] {
@@ -194,6 +203,10 @@
 /* El carril de pestañas se desplaza en celulares, sin barra a la vista. */
 .pestanas {
   scrollbar-width: none;
+  /* El carril desborda a propósito. Sin `contain`, Chrome le suma ese ancho al
+     scroll del documento: la página queda más ancha que la pantalla y el
+     celular deja hacer zoom out. */
+  contain: paint;
 }
 
 .pestanas::-webkit-scrollbar {
