@@ -5,8 +5,12 @@
  *
  * Las rutas de datos (`/health`, `/api/*`) se arman iterando el catálogo de
  * core: una colección nueva aparece sola, sin tocar este archivo.
+ *
+ * `/api/beacon` es la excepción: no lee datos, recibe los eventos de la
+ * landing y los escribe en Analytics Engine junto con los del MCP (analytics.ts).
  */
-import { COLLECTIONS, findCollection, type Snapshot } from "@cordoba/core/web";
+import { COLLECTIONS, findCollection, isWebEvent, type Snapshot } from "@cordoba/core/web";
+import { type AnalyticsDataset, recordMcp, recordWeb, visitorId } from "./analytics.js";
 import { type DataBucket, loadData } from "./data.js";
 import {
   containsInitialize,
@@ -20,6 +24,11 @@ export interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
   /** Bucket con los datasets. Lo llena scripts/sync-r2.mjs. */
   DATA?: DataBucket;
+  /**
+   * Dataset de Analytics Engine (ver analytics.ts). Opcional: sin el binding
+   * el Worker funciona igual, sólo no mide.
+   */
+  ANALYTICS?: AnalyticsDataset;
 }
 
 const CORS = {
@@ -55,7 +64,7 @@ const ndjson = (rows: unknown[]) =>
     },
   });
 
-async function handleMcp(request: Request, snapshot: Snapshot): Promise<Response> {
+async function handleMcp(request: Request, snapshot: Snapshot, env: Env): Promise<Response> {
   if (request.method === "DELETE") {
     // Cierre de sesión: no hay registro de sesiones, así que no hay nada que limpiar.
     return new Response(null, { status: 204, headers: CORS });
@@ -88,6 +97,17 @@ async function handleMcp(request: Request, snapshot: Snapshot): Promise<Response
   }
 
   const response = handleMcpPayload(snapshot, payload);
+  // Un evento por request JSON-RPC: de acá salen sesiones por día, clientes,
+  // tools más usadas y qué consultas fallan. Se escribe antes de salir por
+  // cualquiera de las dos ramas (202 incluido: una notificación también cuenta).
+  if (env.ANALYTICS) {
+    recordMcp(env.ANALYTICS, {
+      request,
+      payload,
+      response,
+      visitante: await visitorId(request),
+    });
+  }
   if (response === null) return new Response(null, { status: 202, headers: CORS });
   const sessionHeaders: Record<string, string> = containsInitialize(payload)
     ? { "mcp-session-id": newSessionId() }
@@ -135,6 +155,44 @@ const LEGACY_API: Record<string, string> = {
   "/api/farmacias/turnos.json": "/api/farmacias_turno/turnos.json",
 };
 
+/** Ruta del beacon de la landing. La conoce también `apps/web` (Layout.astro). */
+const BEACON_PATH = "/api/beacon";
+
+/**
+ * Eventos de la landing: `navigator.sendBeacon` manda un JSON chico
+ * `{ evento, pagina }`. Es un endpoint público, así que se valida el nombre
+ * contra el catálogo de core y se corta el body por tamaño; cualquier otra
+ * cosa se descarta sin ruido (204) para no darle señal a quien pruebe.
+ */
+async function handleBeacon(request: Request, env: Env): Promise<Response> {
+  const vacio = new Response(null, {
+    status: 204,
+    headers: { "cache-control": "no-store", ...CORS },
+  });
+  if (request.method !== "POST") {
+    return json(
+      { error: "Este endpoint acepta POST" },
+      { status: 405, headers: { allow: "POST" } },
+    );
+  }
+  if (Number(request.headers.get("content-length") ?? 0) > 512) return vacio;
+
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    if (!isWebEvent(body["evento"])) return vacio;
+    const pagina = typeof body["pagina"] === "string" ? body["pagina"] : null;
+    recordWeb(env.ANALYTICS, {
+      request,
+      evento: body["evento"],
+      pagina,
+      visitante: await visitorId(request),
+    });
+  } catch {
+    // Body inválido: no es un error que valga la pena reportar al cliente.
+  }
+  return vacio;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -142,6 +200,8 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS });
     }
+
+    if (url.pathname === BEACON_PATH) return handleBeacon(request, env);
 
     const needsData =
       url.pathname === "/mcp" ||
@@ -154,7 +214,7 @@ export default {
     const data = await loadData(env.DATA);
 
     if (url.pathname === "/mcp" || url.pathname === "/mcp/") {
-      return handleMcp(request, data.snapshot);
+      return handleMcp(request, data.snapshot, env);
     }
 
     if (url.pathname === "/health") {

@@ -18,6 +18,8 @@ const { title, description } = Astro.props;
     <meta name="description" content={description} />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0a0a0a" />
+    <!-- Lo genera `src/pages/favicon.svg.ts` a partir del isotipo. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -27,5 +29,18 @@ const { title, description } = Astro.props;
   </head>
   <body>
     <slot />
+
+    {/*
+      Visitas y Web Vitals no se miden acá: el dominio está en Cloudflare y Web
+      Analytics inyecta su beacon en el edge (automatic setup). Agregar el
+      script a mano contaría cada pageview dos veces.
+
+      Esto son los eventos propios, que Web Analytics no sabe medir: el embudo
+      hacia el MCP. Ver src/lib/analitica.ts.
+    */}
+    <script>
+      import { iniciarAnalitica } from "../lib/analitica";
+      iniciarAnalitica();
+    </script>
   </body>
 </html>

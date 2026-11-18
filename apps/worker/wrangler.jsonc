@@ -26,6 +26,15 @@
       "bucket_name": "cordoba-mcp-data"
     }
   ],
+  // Telemetría agregada del MCP y de la landing (ver src/analytics.ts). El
+  // dataset se crea solo en el primer `writeDataPoint`, así que no hay nada que
+  // aprovisionar antes del deploy. El nombre sale de core (ANALYTICS_DATASET).
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANALYTICS",
+      "dataset": "cordoba_mcp_uso"
+    }
+  ],
   "observability": {
     "enabled": true
   }

@@ -1,5 +1,6 @@
 export const PROJECT = "cordoba-mcp" as const;
 
+export * from "./analytics.js";
 export * from "./branding.js";
 export * from "./categories.js";
 export * from "./collections/index.js";
