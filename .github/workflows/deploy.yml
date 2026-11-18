@@ -17,6 +17,7 @@ on:
       - "package.json"
       - "turbo.json"
       - "vitest.config.ts"
+      - "tests/**"
       - "biome.json"
       - "tsconfig.base.json"
       - ".github/workflows/deploy.yml"
