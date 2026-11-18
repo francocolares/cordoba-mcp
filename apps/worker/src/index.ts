@@ -13,6 +13,16 @@ import { COLLECTIONS, findCollection, isWebEvent, type Snapshot } from "@cordoba
 import { type AnalyticsDataset, recordMcp, recordWeb, visitorId } from "./analytics.js";
 import { type DataBucket, loadData } from "./data.js";
 import {
+  declaredBodyExceeds,
+  exceedsBatchLimit,
+  MAX_BATCH_REQUESTS,
+  MAX_BEACON_BODY_BYTES,
+  MAX_MCP_BODY_BYTES,
+  type RateLimiter,
+  RETRY_AFTER_SECONDS,
+  withinRateLimit,
+} from "./limits.js";
+import {
   containsInitialize,
   handleMcpPayload,
   newSessionId,
@@ -29,6 +39,7 @@ export interface Env {
    * el Worker funciona igual, sólo no mide.
    */
   ANALYTICS?: AnalyticsDataset;
+  RATE_LIMIT?: RateLimiter;
 }
 
 const CORS = {
@@ -64,6 +75,25 @@ const ndjson = (rows: unknown[]) =>
     },
   });
 
+const NO_STORE = { "cache-control": "no-store" };
+
+const tooManyRequests = () =>
+  json(
+    { error: "Demasiados pedidos desde esta IP. Esperá un minuto y reintentá." },
+    {
+      status: 429,
+      headers: { ...NO_STORE, "retry-after": String(RETRY_AFTER_SECONDS) },
+    },
+  );
+
+const rpcRejection = (message: string) =>
+  json(
+    { jsonrpc: "2.0", id: null, error: { code: -32600, message } },
+    { status: 413, headers: NO_STORE },
+  );
+
+const bodyTooLarge = () => rpcRejection(`El body no puede pasar de ${MAX_MCP_BODY_BYTES} bytes`);
+
 async function handleMcp(request: Request, snapshot: Snapshot, env: Env): Promise<Response> {
   if (request.method === "DELETE") {
     // Cierre de sesión: no hay registro de sesiones, así que no hay nada que limpiar.
@@ -86,14 +116,23 @@ async function handleMcp(request: Request, snapshot: Snapshot, env: Env): Promis
     return json({ error: "Método no permitido" }, { status: 405 });
   }
 
+  if (declaredBodyExceeds(request, MAX_MCP_BODY_BYTES)) return bodyTooLarge();
+
+  const raw = await request.text();
+  if (raw.length > MAX_MCP_BODY_BYTES) return bodyTooLarge();
+
   let payload: unknown;
   try {
-    payload = await request.json();
+    payload = JSON.parse(raw);
   } catch {
     return json(
       { jsonrpc: "2.0", id: null, error: { code: -32700, message: "JSON inválido" } },
       { status: 400 },
     );
+  }
+
+  if (exceedsBatchLimit(payload)) {
+    return rpcRejection(`Un batch acepta hasta ${MAX_BATCH_REQUESTS} requests por POST`);
   }
 
   const response = handleMcpPayload(snapshot, payload);
@@ -175,7 +214,7 @@ async function handleBeacon(request: Request, env: Env): Promise<Response> {
       { status: 405, headers: { allow: "POST" } },
     );
   }
-  if (Number(request.headers.get("content-length") ?? 0) > 512) return vacio;
+  if (declaredBodyExceeds(request, MAX_BEACON_BODY_BYTES)) return vacio;
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
@@ -201,15 +240,18 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    if (url.pathname === BEACON_PATH) return handleBeacon(request, env);
-
+    const isBeacon = url.pathname === BEACON_PATH;
     const needsData =
       url.pathname === "/mcp" ||
       url.pathname === "/mcp/" ||
       url.pathname === "/health" ||
       url.pathname.startsWith("/api/") ||
       url.pathname in LEGACY_API;
-    if (!needsData) return env.ASSETS.fetch(request);
+    if (!isBeacon && !needsData) return env.ASSETS.fetch(request);
+
+    if (!(await withinRateLimit(env.RATE_LIMIT, request))) return tooManyRequests();
+
+    if (isBeacon) return handleBeacon(request, env);
 
     const data = await loadData(env.DATA);
 

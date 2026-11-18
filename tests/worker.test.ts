@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { resetDataCache } from "../apps/worker/src/data.js";
 import worker, { type Env } from "../apps/worker/src/index.js";
+import { MAX_BATCH_REQUESTS, MAX_MCP_BODY_BYTES } from "../apps/worker/src/limits.js";
 import { emptyR2, r2FromDataDir } from "./helpers.js";
 
 /** El binding de assets, simulado: devolvemos un marcador para ver que delega. */
@@ -356,5 +357,136 @@ describe("los datos vienen de R2", () => {
       await worker.fetch(new Request("https://agenda.test/health"), { ASSETS: assets })
     ).json()) as { data_source: { error: string | null } };
     expect(body.data_source.error).toContain("DATA");
+  });
+});
+
+describe("límites contra el abuso", () => {
+  it("un batch más largo que el tope se rechaza sin ejecutar nada", async () => {
+    const batch = Array.from({ length: MAX_BATCH_REQUESTS + 1 }, (_, i) => ({
+      jsonrpc: "2.0",
+      id: i,
+      method: "tools/call",
+      params: { name: "search", arguments: { collection: "eventos" } },
+    }));
+    const res = await call("/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(batch),
+    });
+    expect(res.status).toBe(413);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const body = (await res.json()) as { error: { code: number; message: string } };
+    expect(body.error.code).toBe(-32600);
+    expect(body.error.message).toContain(String(MAX_BATCH_REQUESTS));
+  });
+
+  it("un batch dentro del tope sigue pasando", async () => {
+    const batch = Array.from({ length: MAX_BATCH_REQUESTS }, (_, i) => ({
+      jsonrpc: "2.0",
+      id: i,
+      method: "ping",
+    }));
+    const { res, json } = (await rpc(batch)) as { res: Response; json: { id: number }[] };
+    expect(res.status).toBe(200);
+    expect(json).toHaveLength(MAX_BATCH_REQUESTS);
+  });
+
+  it("un body gigante se corta por content-length, sin leerlo", async () => {
+    const res = await call("/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(MAX_MCP_BODY_BYTES + 1),
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+    });
+    expect(res.status).toBe(413);
+    expect(((await res.json()) as { error: { message: string } }).error.message).toContain(
+      String(MAX_MCP_BODY_BYTES),
+    );
+  });
+
+  it("un body gigante sin content-length también se corta", async () => {
+    const relleno = "x".repeat(MAX_MCP_BODY_BYTES + 1);
+    const res = await call("/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping", params: { relleno } }),
+    });
+    expect(res.status).toBe(413);
+  });
+
+  const limitado = (permitidos: number) => {
+    const keys: string[] = [];
+    const env: Env = {
+      ASSETS: assets,
+      DATA: bucket,
+      RATE_LIMIT: {
+        limit: async ({ key }) => {
+          keys.push(key);
+          return { success: keys.length <= permitidos };
+        },
+      },
+    };
+    return { env, keys };
+  };
+
+  it("pasado el tope por IP devuelve 429 con retry-after", async () => {
+    const { env: acotado } = limitado(1);
+    const pedido = () =>
+      worker.fetch(
+        new Request("https://agenda.test/health", { headers: { "cf-connecting-ip": "1.2.3.4" } }),
+        acotado,
+      );
+
+    expect((await pedido()).status).toBe(200);
+    const cortado = await pedido();
+    expect(cortado.status).toBe(429);
+    expect(cortado.headers.get("retry-after")).toBe("60");
+    expect(cortado.headers.get("cache-control")).toBe("no-store");
+    expect(cortado.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("cuenta por IP, también en /mcp, /api y el beacon", async () => {
+    const { env: acotado, keys } = limitado(99);
+    const rutas = ["/health", "/api/eventos.jsonl", "/mcp", "/api/beacon"];
+    for (const ruta of rutas) {
+      await worker.fetch(
+        new Request(`https://agenda.test${ruta}`, {
+          method: ruta === "/health" || ruta.endsWith(".jsonl") ? "GET" : "POST",
+          headers: { "cf-connecting-ip": "9.9.9.9", "content-type": "application/json" },
+          ...(ruta === "/health" || ruta.endsWith(".jsonl")
+            ? {}
+            : { body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }) }),
+        }),
+        acotado,
+      );
+    }
+    expect(keys).toEqual(["9.9.9.9", "9.9.9.9", "9.9.9.9", "9.9.9.9"]);
+  });
+
+  it("los assets estáticos no gastan cupo", async () => {
+    const { env: acotado, keys } = limitado(0);
+    const res = await worker.fetch(new Request("https://agenda.test/index.html"), acotado);
+    expect(res.status).toBe(200);
+    expect(keys).toEqual([]);
+  });
+
+  it("el preflight de CORS tampoco gasta cupo", async () => {
+    const { env: acotado, keys } = limitado(0);
+    const res = await worker.fetch(
+      new Request("https://agenda.test/mcp", { method: "OPTIONS" }),
+      acotado,
+    );
+    expect(res.status).toBe(204);
+    expect(keys).toEqual([]);
+  });
+
+  it("sin el binding el Worker atiende igual", async () => {
+    const res = await worker.fetch(new Request("https://agenda.test/health"), {
+      ASSETS: assets,
+      DATA: bucket,
+    });
+    expect(res.status).toBe(200);
   });
 });
