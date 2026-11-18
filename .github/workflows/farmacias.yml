@@ -20,7 +20,7 @@ on:
         type: string
         required: false
       download:
-        description: "Bajar la planilla de Drive en vez de usar el snapshot commiteado"
+        description: "Bajar la planilla de Drive (desmarcalo sólo si ya tenés el .xlsx en data/raw/farmacias local)"
         type: boolean
         default: true
       geocode:
@@ -53,10 +53,13 @@ jobs:
 
       # El .xlsx que exporta Drive no es reproducible byte a byte, así que
       # comparamos el hash del contenido normalizado que calcula el validador.
+      # Los inputs entran por `env`, no interpolados en el script: un valor con
+      # comillas o `;` sería ejecutado por el shell si se pegara en el `run`.
       - id: check
+        env:
+          YEAR: ${{ inputs.year || '' }}
         run: |
           set -uo pipefail
-          YEAR="${{ inputs.year || '' }}"
           ARGS=(farmacias validate --download)
           if [ -n "$YEAR" ]; then ARGS+=(--year "$YEAR"); fi
           node apps/scraper/dist/index.js "${ARGS[@]}" > remoto.json
@@ -72,13 +75,17 @@ jobs:
             echo "exit=$STATUS"
           } >> "$GITHUB_OUTPUT"
 
+      # El .xlsx crudo ya no se commitea (vive en `data/raw/`, ignorado), así que
+      # la señal de "tenemos el turnero de tal año" es `years` en el status del
+      # dataset, que es justamente lo que se publica.
       - name: ¿Falta el turnero del año que viene?
         id: nextyear
         run: |
           NEXT=$(( $(date -u +%Y) + 1 ))
           MONTH=$(date -u +%-m)
           MISSING=false
-          if [ "$MONTH" -ge 10 ] && [ ! -f "data/raw/farmacias/turnero-$NEXT.xlsx" ]; then
+          HAS_NEXT=$(jq --argjson y "$NEXT" -r '[.years // [] | .[] == $y] | any' data/farmacias/status.json 2>/dev/null || echo false)
+          if [ "$MONTH" -ge 10 ] && [ "$HAS_NEXT" != "true" ]; then
             MISSING=true
           fi
           echo "year=$NEXT" >> "$GITHUB_OUTPUT"
@@ -96,7 +103,9 @@ jobs:
             if (nextYear.missing === 'true') {
               body.push(`### Falta el turnero ${nextYear.year}`);
               body.push('');
-              body.push(`No está \`data/raw/farmacias/turnero-${nextYear.year}.xlsx\`. Sin él, el 1 de enero las respuestas pasan a proyectarse con el ciclo de 30 días (quedan marcadas con \`turno_derivado_del_ciclo: true\`) y dejan de reflejar la planilla oficial.`);
+              body.push(`El dataset publicado no cubre ${nextYear.year} (\`years\` en \`data/farmacias/status.json\`). Sin el turnero de ese año, el 1 de enero las respuestas pasan a proyectarse con el ciclo de 30 días (quedan marcadas con \`turno_derivado_del_ciclo: true\`) y dejan de reflejar la planilla oficial.`);
+              body.push('');
+              body.push('Para cargarlo: Actions -> farmacias-turnero -> Run workflow, con `ingest: true`, `download: true` y `year` del turnero nuevo.');
               body.push('');
             }
             if (check.validation === 'fail') {
@@ -154,11 +163,14 @@ jobs:
       - run: pnpm build
 
       - name: Ingestar el turnero
+        env:
+          YEAR: ${{ inputs.year || '' }}
+          DOWNLOAD: ${{ inputs.download }}
         run: |
           set -euo pipefail
           ARGS=(farmacias ingest)
-          if [ "${{ inputs.download }}" = "true" ]; then ARGS+=(--download); fi
-          if [ -n "${{ inputs.year || '' }}" ]; then ARGS+=(--year "${{ inputs.year }}"); fi
+          if [ "$DOWNLOAD" = "true" ]; then ARGS+=(--download); fi
+          if [ -n "$YEAR" ]; then ARGS+=(--year "$YEAR"); fi
           node apps/scraper/dist/index.js "${ARGS[@]}"
 
       # Dos pasadas: Georef por lotes (segundos) y Nominatim a 1 request por
@@ -175,7 +187,8 @@ jobs:
         run: |
           git config user.name "agenda-bot"
           git config user.email "agenda-bot@users.noreply.github.com"
-          git add data/farmacias data/raw/farmacias
+          # Sólo el dataset normalizado: `data/raw/` está ignorado a propósito.
+          git add data/farmacias
           if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Sin cambios en data/farmacias."

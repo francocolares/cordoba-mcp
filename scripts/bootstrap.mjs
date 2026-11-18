@@ -70,14 +70,21 @@ function ok(message) {
 }
 
 /** Corre un comando mostrando su salida. Devuelve { code, stdout }. */
-function run(command, cmdArgs, { cwd = repoRoot, capture = false, quiet = false, env } = {}) {
+function run(
+  command,
+  cmdArgs,
+  { cwd = repoRoot, capture = false, quiet = false, env, input } = {},
+) {
   if (!quiet) console.log(`  ${dim(`$ ${command} ${cmdArgs.join(" ")}`)}`);
   return new Promise((resolvePromise, reject) => {
     const child = spawn(command, cmdArgs, {
       cwd,
       env: { ...process.env, ...env },
-      stdio: capture ? ["inherit", "pipe", "inherit"] : "inherit",
+      stdio: [input === undefined ? "inherit" : "pipe", capture ? "pipe" : "inherit", "inherit"],
     });
+    if (input !== undefined) {
+      child.stdin.end(input);
+    }
     let stdout = "";
     if (capture) {
       child.stdout.setEncoding("utf8");
@@ -359,7 +366,16 @@ if (flags.skipGithub || !(await exists(join(repoRoot, ".git")))) {
         note(`${name} sin valor: configuralo después con \`gh secret set ${name} --env prod\`.`);
         continue;
       }
-      const { code } = await run("gh", ["secret", "set", name, "--env", "prod", "--body", value]);
+      // Por stdin, no por `--body`: el valor no aparece en la línea de comandos
+      // (visible con `ps` para cualquier usuario de la máquina) ni en el log
+      // que imprime `run`.
+      const { code } = await run(
+        "gh",
+        ["secret", "set", name, "--env", "prod", "--body-file", "-"],
+        {
+          input: value,
+        },
+      );
       if (code === 0) ok(`${name} configurado en el environment prod`);
     }
     await run("gh", [
