@@ -228,9 +228,14 @@ const planosSello = planosIsotipo.map((plano, i) => ({
     opacity: 0.26;
   }
 
-  body:has([data-zifos]:hover) .origami,
   body:has([data-zifos]:focus-visible) .origami {
     opacity: 0.12;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    body:has([data-zifos]:hover) .origami {
+      opacity: 0.12;
+    }
   }
 
   @media (hover: none), (max-width: 640px) {

@@ -330,11 +330,18 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
 
   if (chat && etapas.length) {
     /*
-     * La franja que decide qué etapa manda: al 55% del alto en escritorio y
-     * más abajo en celulares, donde el gadget ocupa la parte de arriba.
+     * La franja que decide qué etapa manda tiene que caer donde el gadget
+     * queda pegado: al 55% del alto en escritorio y cerca del borde de arriba
+     * en celulares, así la primera etapa manda desde que el gadget se pega.
      */
     const angosta = window.matchMedia("(max-width: 1023px)");
-    const franja = () => (angosta.matches ? "-85% 0px -14% 0px" : "-55% 0px -44% 0px");
+    const ALTURA_FRANJA_ANGOSTA = 0.18;
+    const ALTURA_FRANJA_ANCHA = 0.55;
+    const alturaFranja = () => (angosta.matches ? ALTURA_FRANJA_ANGOSTA : ALTURA_FRANJA_ANCHA);
+    const franja = () => {
+      const arriba = Math.round(alturaFranja() * 100);
+      return `-${arriba}% 0px -${99 - arriba}% 0px`;
+    };
 
     const cruzando = new Set<string>();
     let observador: IntersectionObserver | null = null;
@@ -371,9 +378,10 @@ const enObra = conversaciones.filter((c) => c.proximamente).map((c) => c.id);
         const etapa = etapas.find((e) => e.dataset.etapa === id);
         if (!etapa) return;
         const caja = etapa.getBoundingClientRect();
-        const proporcion = angosta.matches ? 0.85 : 0.55;
         window.scrollTo({
-          top: Math.round(window.scrollY + caja.top + caja.height / 2 - innerHeight * proporcion),
+          top: Math.round(
+            window.scrollY + caja.top + caja.height / 2 - innerHeight * alturaFranja(),
+          ),
           behavior: "smooth",
         });
       });

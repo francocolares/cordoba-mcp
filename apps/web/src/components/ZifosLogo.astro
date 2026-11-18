@@ -73,7 +73,7 @@ const { class: extra = "" } = Astro.props;
 
 <canvas data-fuego aria-hidden="true" class="fuego"></canvas>
 
-<audio data-fuego-audio src="/audio/fuego.mp3" preload="none" loop aria-hidden="true"></audio>
+<audio data-fuego-audio src="/audio/fuego.mp3" preload="none" aria-hidden="true"></audio>
 
 <p class="aviso-sonido" data-aviso-sonido aria-hidden="true" hidden>
   presioná <kbd>S</kbd> para habilitar el sonido
@@ -143,16 +143,33 @@ const { class: extra = "" } = Astro.props;
     transition: filter 320ms cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  .zifos:hover,
   .zifos:focus-visible {
     color: var(--color-ember);
   }
 
-  .zifos:hover svg,
   .zifos:focus-visible svg {
     filter:
       drop-shadow(0 0 7px color-mix(in oklab, var(--color-accent) 45%, transparent))
       drop-shadow(0 0 18px color-mix(in oklab, var(--color-accent) 30%, transparent));
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .zifos:hover {
+      color: var(--color-ember);
+    }
+
+    .zifos:hover svg {
+      filter:
+        drop-shadow(0 0 7px color-mix(in oklab, var(--color-accent) 45%, transparent))
+        drop-shadow(0 0 18px color-mix(in oklab, var(--color-accent) 30%, transparent));
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .fuego,
+    .aviso-sonido {
+      display: none;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -590,6 +607,7 @@ const { class: extra = "" } = Astro.props;
           mostrarAviso(true);
           return;
         }
+        if (!desdeElPrincipio && (pista.ended || !pista.paused)) return;
         tocar(desdeElPrincipio).catch(() => {
           permitido = false;
           mostrarAviso(true);
@@ -745,12 +763,20 @@ const { class: extra = "" } = Astro.props;
       sonido?.frenar();
     });
 
+    let abriendoZifos = false;
+
     for (const disparador of disparadores) {
       disparador.addEventListener("pointerenter", () => avivar(true));
       disparador.addEventListener("pointermove", () => avivar(true));
       disparador.addEventListener("pointerleave", () => avivar(false));
       disparador.addEventListener("focus", () => avivar(true));
       disparador.addEventListener("blur", () => avivar(false));
+      disparador.addEventListener("click", () => {
+        abriendoZifos = true;
+      });
+      disparador.addEventListener("auxclick", () => {
+        abriendoZifos = true;
+      });
     }
 
     const soltar = () => {
@@ -758,10 +784,20 @@ const { class: extra = "" } = Astro.props;
       sonido?.frenar();
     };
 
-    addEventListener("blur", soltar);
+    const soltarSiNoAbrimosZifos = () => {
+      if (!abriendoZifos) soltar();
+    };
+
+    const volverAlFrente = () => {
+      abriendoZifos = false;
+      if (!disparadores.some((disparador) => disparador.matches(":hover"))) avivar(false);
+    };
+
+    addEventListener("blur", soltarSiNoAbrimosZifos);
     addEventListener("pagehide", soltar);
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) soltar();
+      if (document.hidden) soltarSiNoAbrimosZifos();
+      else volverAlFrente();
     });
   }
 
@@ -770,7 +806,10 @@ const { class: extra = "" } = Astro.props;
   const aviso = document.querySelector<HTMLElement>("[data-aviso-sonido]");
   const disparadores = [...document.querySelectorAll<HTMLElement>("[data-zifos]")];
 
-  if (lienzo && disparadores.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const apuntaFino = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const prefiereQuietud = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (lienzo && disparadores.length && apuntaFino && !prefiereQuietud) {
     encender(lienzo, disparadores, pista, aviso);
   }
 </script>

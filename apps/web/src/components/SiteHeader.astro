@@ -3,6 +3,12 @@ import { REPO } from "../data/content";
 import BrandIcon from "./BrandIcon.astro";
 import CordobaMark from "./CordobaMark.astro";
 import Seam from "./Seam.astro";
+
+const secciones = [
+  { href: "#conectar", texto: "Conectar" },
+  { href: "#fuentes", texto: "Fuentes" },
+  { href: "#contribuir", texto: "Contribuir" },
+];
 ---
 
 <header class="sticky top-0 z-30 border-b border-line bg-bg/80 backdrop-blur-md">
@@ -15,24 +21,182 @@ import Seam from "./Seam.astro";
     </a>
 
     <nav class="hidden items-center gap-7 text-sm text-muted sm:flex">
-      <a href="#conectar" class="no-underline hover:text-ink">Conectar</a>
-      <a href="#fuentes" class="no-underline hover:text-ink">Fuentes</a>
-      <a href="#contribuir" class="no-underline hover:text-ink">Contribuir</a>
+      {
+        secciones.map((seccion) => (
+          <a href={seccion.href} class="no-underline hover:text-ink">{seccion.texto}</a>
+        ))
+      }
     </nav>
 
-    <!--
-      Acceso al repo: sin borde ni fondo, con el mismo peso y color que los
-      enlaces de la nav, así se lee como parte del topbar y no como un CTA. El
-      contacto vive en el pie, que es donde están los demás accesos.
-    -->
     <a
       href={REPO}
       target="_blank"
       rel="noopener noreferrer"
-      class="inline-flex items-center gap-2 text-sm text-muted no-underline transition-colors hover:text-ink"
+      class="hidden items-center gap-2 text-sm text-muted no-underline transition-colors hover:text-ink sm:inline-flex"
+    >
+      <BrandIcon name="github-icon" class="size-[18px]" />
+      Repo en GitHub
+    </a>
+
+    <button
+      type="button"
+      data-abrir-menu
+      aria-controls="menu-chico"
+      aria-expanded="false"
+      aria-label="Abrir el menú"
+      class="-mr-2 inline-flex size-10 items-center justify-center rounded-md text-muted transition-colors hover:text-ink sm:hidden"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        aria-hidden="true"
+        class="size-[22px] shrink-0"
+      >
+        <path class="trazo-arriba" d="M4 7h16"></path>
+        <path class="trazo-medio" d="M4 12h16"></path>
+        <path class="trazo-abajo" d="M4 17h16"></path>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<nav
+  id="menu-chico"
+  data-menu
+  inert
+  aria-label="Secciones del sitio"
+  class="fixed inset-0 z-20 flex flex-col bg-bg/95 pt-14 backdrop-blur-xl sm:hidden"
+>
+  <div class="shell flex flex-1 flex-col justify-center gap-1 pb-24">
+    {
+      secciones.map((seccion, indice) => (
+        <a
+          href={seccion.href}
+          data-item
+          style={`--retardo: ${60 + indice * 70}ms`}
+          class="group flex items-baseline gap-4 border-b border-line py-5 font-mono text-2xl text-body no-underline transition-colors hover:text-ink"
+        >
+          <span class="text-xs text-muted transition-colors group-hover:text-accent">
+            0{indice + 1}
+          </span>
+          {seccion.texto}
+        </a>
+      ))
+    }
+
+    <a
+      href={REPO}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-item
+      style={`--retardo: ${60 + secciones.length * 70}ms`}
+      class="mt-8 inline-flex items-center gap-2.5 self-start rounded-md border border-line-strong px-4 py-2.5 text-sm text-muted no-underline transition-colors hover:border-accent hover:text-ink"
     >
       <BrandIcon name="github-icon" class="size-[18px]" />
       Repo en GitHub
     </a>
   </div>
-</header>
+</nav>
+
+<style>
+  .trazo-arriba,
+  .trazo-medio,
+  .trazo-abajo {
+    transform-origin: center;
+    transition: transform 200ms ease, opacity 120ms linear;
+  }
+
+  [aria-expanded="true"] .trazo-arriba {
+    transform: translateY(5px) rotate(45deg);
+  }
+
+  [aria-expanded="true"] .trazo-medio {
+    opacity: 0;
+  }
+
+  [aria-expanded="true"] .trazo-abajo {
+    transform: translateY(-5px) rotate(-45deg);
+  }
+
+  [data-menu] {
+    opacity: 0;
+    visibility: hidden;
+    clip-path: inset(0 0 100% 0);
+    transition: opacity 260ms ease, clip-path 420ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s linear 420ms;
+  }
+
+  [data-menu][data-abierto] {
+    opacity: 1;
+    visibility: visible;
+    clip-path: inset(0 0 0 0);
+    transition-delay: 0s;
+  }
+
+  [data-item] {
+    opacity: 0;
+    transform: translateY(14px);
+    transition: opacity 260ms ease, transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+      color 150ms ease, border-color 150ms ease;
+  }
+
+  [data-abierto] [data-item] {
+    opacity: 1;
+    transform: none;
+    transition-delay: var(--retardo);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .trazo-arriba,
+    .trazo-medio,
+    .trazo-abajo,
+    [data-menu],
+    [data-item] {
+      transition: none;
+    }
+
+    [data-menu] {
+      clip-path: none;
+    }
+
+    [data-item] {
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  const boton = document.querySelector<HTMLButtonElement>("[data-abrir-menu]");
+  const menu = document.querySelector<HTMLElement>("[data-menu]");
+
+  if (boton && menu) {
+    const estaAbierto = () => menu.hasAttribute("data-abierto");
+
+    const mostrar = (abierto: boolean) => {
+      menu.toggleAttribute("data-abierto", abierto);
+      menu.inert = !abierto;
+      document.body.style.overflow = abierto ? "hidden" : "";
+      boton.setAttribute("aria-expanded", String(abierto));
+      boton.setAttribute("aria-label", abierto ? "Cerrar el menú" : "Abrir el menú");
+    };
+
+    boton.addEventListener("click", () => mostrar(!estaAbierto()));
+
+    for (const enlace of menu.querySelectorAll("a")) {
+      enlace.addEventListener("click", () => mostrar(false));
+    }
+
+    addEventListener("keydown", (evento) => {
+      if (evento.key !== "Escape" || !estaAbierto()) return;
+      mostrar(false);
+      boton.focus();
+    });
+
+    matchMedia("(min-width: 40rem)").addEventListener("change", (evento) => {
+      if (evento.matches) mostrar(false);
+    });
+  }
+</script>

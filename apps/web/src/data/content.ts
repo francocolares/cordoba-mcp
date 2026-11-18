@@ -66,7 +66,7 @@ export type Via = {
   rotulo: string;
   titulo: string;
   icono: ContribIconName;
-  /** Dos o tres oraciones: qué es y por qué hace falta. */
+  /** Una o dos oraciones: qué es y por qué hace falta. */
   cuerpo: string;
   /** Lo concreto que incluye cada vía. */
   puntos: string[];
@@ -103,12 +103,12 @@ export const vias: Via[] = [
     titulo: "Ser sponsor del proyecto",
     icono: "heart-handshake",
     cuerpo:
-      "Mantener cada fuente tiene un costo: relevamiento, validación y las correcciones que exige cada cambio en el origen, más la infraestructura que sostiene el servidor. El aporte de los sponsors cubre ese trabajo y es lo que permite sostener el compromiso de fondo: código abierto y acceso gratuito.",
+      "Cada fuente cuesta relevarla, validarla y corregirla cuando cambia el origen, más la infraestructura que la sirve. Los sponsors cubren ese trabajo: por eso el proyecto sigue abierto y gratuito.",
     puntos: [
-      "El proyecto se mantiene de código abierto y el acceso a los datos, gratuito",
-      "Prioridad para solicitar nuevas fuentes en el roadmap de la herramienta",
-      "Padrinazgo de una fuente: la colección que sostiene queda declarada a su nombre",
-      "Nombre o logo del sponsor, enlazado a su sitio o perfil, acá y en el repositorio",
+      "Código abierto y acceso gratuito a los datos",
+      "Prioridad para pedir nuevas fuentes en el roadmap",
+      "Padrinazgo: la fuente que sostiene queda declarada a su nombre",
+      "Su nombre o logo, enlazado, acá y en el repositorio",
     ],
     cta: {
       texto: "Quiero ser sponsor",
@@ -123,12 +123,12 @@ export const vias: Via[] = [
     titulo: "Contratar nuestros servicios",
     icono: "server",
     cuerpo:
-      "El mismo trabajo que este proyecto hace con los datos públicos puede aplicarse dentro de una organización: consolidar lo que hoy está disperso en planillas, bases, documentos y sistemas heredados, normalizarlo a un modelo común y dejarlo disponible para que la inteligencia artificial lo consulte y lo cruce. Y la capacitación de tu equipo es parte del trabajo: una fuente bien armada rinde al máximo cuando quien la consulta sabe qué pedirle.",
+      "El mismo trabajo, puertas adentro: consolidar lo que hoy está disperso en planillas, bases y sistemas heredados, normalizarlo y dejarlo listo para que la inteligencia artificial lo consulte y lo cruce.",
     puntos: [
       "Relevamiento y normalización de sus fuentes a un modelo común",
-      "Un servidor MCP privado, con el control de accesos de su organización",
-      "Integración con Claude, ChatGPT o las aplicaciones que ya usa su equipo",
-      "Capacitación de tu equipo para sacarle el máximo provecho a la IA",
+      "Un servidor MCP privado, con sus propios controles de acceso",
+      "Integración con Claude, ChatGPT o las apps que ya usa su equipo",
+      "Capacitación del equipo para sacarle todo el provecho",
     ],
     cta: { texto: "Agendar una cita", href: CITA, icono: "calendar-check" },
     extra: { texto: "Conocer Zifos", href: ZIFOS },
