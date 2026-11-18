@@ -747,10 +747,22 @@ const { class: extra = "" } = Astro.props;
 
     for (const disparador of disparadores) {
       disparador.addEventListener("pointerenter", () => avivar(true));
+      disparador.addEventListener("pointermove", () => avivar(true));
       disparador.addEventListener("pointerleave", () => avivar(false));
       disparador.addEventListener("focus", () => avivar(true));
       disparador.addEventListener("blur", () => avivar(false));
     }
+
+    const soltar = () => {
+      avivar(false);
+      sonido?.frenar();
+    };
+
+    addEventListener("blur", soltar);
+    addEventListener("pagehide", soltar);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) soltar();
+    });
   }
 
   const lienzo = document.querySelector<HTMLCanvasElement>("[data-fuego]");
