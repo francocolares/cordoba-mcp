@@ -107,7 +107,8 @@ export const vias: Via[] = [
     puntos: [
       "El proyecto se mantiene de código abierto y el acceso a los datos, gratuito",
       "Prioridad para solicitar nuevas fuentes en el roadmap de la herramienta",
-      "Mención del sponsor en el repositorio y en esta página",
+      "Padrinazgo de una fuente: la colección que sostiene queda declarada a su nombre",
+      "Nombre o logo del sponsor, enlazado a su sitio o perfil, acá y en el repositorio",
     ],
     cta: {
       texto: "Quiero ser sponsor",
@@ -119,14 +120,15 @@ export const vias: Via[] = [
   {
     id: "servicios",
     rotulo: "Empresas",
-    titulo: "Estandarizar los datos de su empresa",
+    titulo: "Contratar nuestros servicios",
     icono: "server",
     cuerpo:
-      "El mismo trabajo que este proyecto hace con los datos públicos puede aplicarse dentro de una organización: consolidar lo que hoy está disperso en planillas, bases, documentos y sistemas heredados, normalizarlo a un modelo común y dejarlo disponible para que la inteligencia artificial lo consulte y lo cruce.",
+      "El mismo trabajo que este proyecto hace con los datos públicos puede aplicarse dentro de una organización: consolidar lo que hoy está disperso en planillas, bases, documentos y sistemas heredados, normalizarlo a un modelo común y dejarlo disponible para que la inteligencia artificial lo consulte y lo cruce. Y la capacitación de tu equipo es parte del trabajo: una fuente bien armada rinde al máximo cuando quien la consulta sabe qué pedirle.",
     puntos: [
       "Relevamiento y normalización de sus fuentes a un modelo común",
       "Un servidor MCP privado, con el control de accesos de su organización",
       "Integración con Claude, ChatGPT o las aplicaciones que ya usa su equipo",
+      "Capacitación de tu equipo para sacarle el máximo provecho a la IA",
     ],
     cta: { texto: "Agendar una cita", href: CITA, icono: "calendar-check" },
     extra: { texto: "Conocer Zifos", href: ZIFOS },
