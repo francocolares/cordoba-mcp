@@ -5,8 +5,10 @@ export const ENDPOINT = "https://cordobamcp.com/mcp";
 export const REPO = "https://github.com/francocolares/cordoba-mcp";
 /** Invitación al grupo de WhatsApp de la comunidad. */
 export const COMUNIDAD = "https://chat.whatsapp.com/GvyIE2o8rCI6dYL2M2dJNV";
-export const VIDEO_PRESENTACION =
-  "https://player.vimeo.com/video/1248508965?controls=0&title=0&byline=0&portrait=0&pip=0&keyboard=0&dnt=1&autoplay=1&playsinline=1";
+const embedVimeo = (id: string) =>
+  `https://player.vimeo.com/video/${id}?controls=0&title=0&byline=0&portrait=0&pip=0&keyboard=0&dnt=1&autoplay=1&playsinline=1`;
+export const VIDEO_PRESENTACION = embedVimeo("1248508965");
+export const VIDEO_EMPRESAS = embedVimeo("1248776752");
 /** Casilla de contacto del proyecto. */
 export const CONTACTO = "hola@fecocode.com";
 export const BAJA_DATOS = `mailto:${CONTACTO}?subject=${encodeURIComponent(
@@ -85,8 +87,7 @@ export type Via = {
     /** Ícono de trazo, para lo que no tiene marca propia. */
     icono?: CtaIconName;
   };
-  /** Un enlace secundario, sin peso de botón. */
-  extra?: { texto: string; href: string };
+  video?: { texto: string; titulo: string; fuente: string };
   /**
    * Pinta la ficha con el acento naranja. La lleva una sola de las dos: si las
    * dos resaltan, ninguna se lee primero.
@@ -133,7 +134,11 @@ export const vias: Via[] = [
       "Capacitación del equipo para sacarle todo el provecho",
     ],
     cta: { texto: "Agendar una cita", href: CITA, icono: "calendar-check" },
-    extra: { texto: "Conocer Zifos", href: ZIFOS },
+    video: {
+      texto: "Ver la presentación",
+      titulo: "Video de presentación de Córdoba MCP para empresas",
+      fuente: VIDEO_EMPRESAS,
+    },
     destacada: false,
   },
 ];

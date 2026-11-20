@@ -1,8 +1,10 @@
 ---
 import type { Via } from "../data/content";
-import BrandIcon from "./BrandIcon.astro";
 import CheckIcon from "./CheckIcon.astro";
+import PlayIcon from "./PlayIcon.astro";
 import SourceIcon from "./SourceIcon.astro";
+import ViaCta from "./ViaCta.astro";
+import VideoModal from "./VideoModal.astro";
 
 interface Props {
   via: Via;
@@ -11,11 +13,7 @@ interface Props {
 const { via } = Astro.props;
 const { destacada } = via;
 
-/** Sale de la página todo lo que no sea correo ni anclaje interno. */
-const esExterno = (href: string) => !href.startsWith("mailto:") && !href.startsWith("#");
-
-const ctaExterno = esExterno(via.cta.href);
-const extraExterno = via.extra ? esExterno(via.extra.href) : false;
+const modal = `video-${via.id}`;
 ---
 
 <article
@@ -65,38 +63,30 @@ const extraExterno = via.extra ? esExterno(via.extra.href) : false;
   </ul>
 
   <footer class="mt-auto flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-line pt-5">
-    <a
-      href={via.cta.href}
-      data-evento={`via_${via.id}`}
-      target={ctaExterno ? "_blank" : undefined}
-      rel={ctaExterno ? "noopener noreferrer" : undefined}
-      class:list={[
-        "inline-flex items-center gap-2 rounded-card px-4 py-2.5 text-sm font-medium no-underline transition-colors",
-        destacada
-          ? "bg-accent text-jet hover:bg-accent-soft"
-          : "border border-line-strong bg-bg text-ink hover:bg-white/[0.06]",
-      ]}
-    >
-      {via.cta.marca && <BrandIcon name={via.cta.marca} class="size-[18px]" />}
-      {via.cta.icono && <SourceIcon name={via.cta.icono} class="size-[18px]" />}
-      {via.cta.texto}
-      {ctaExterno && <span aria-hidden="true" class="opacity-60">↗</span>}
-    </a>
+    <ViaCta cta={via.cta} evento={`via_${via.id}`} acento={destacada} />
 
     {
-      via.extra && (
-        <a
-          href={via.extra.href}
-          target={extraExterno ? "_blank" : undefined}
-          rel={extraExterno ? "noopener noreferrer" : undefined}
-          class="text-sm text-muted no-underline hover:text-ink"
+      via.video && (
+        <button
+          type="button"
+          data-abrir-video={modal}
+          data-evento={`via_${via.id}_video`}
+          class="inline-flex items-center gap-2 text-sm text-muted transition-colors hover:text-ink"
         >
-          {via.extra.texto}
-          {extraExterno && <span aria-hidden="true"> ↗</span>}
-        </a>
+          <PlayIcon class="size-4" />
+          {via.video.texto}
+        </button>
       )
     }
   </footer>
+
+  {
+    via.video && (
+      <VideoModal id={modal} titulo={via.video.titulo} fuente={via.video.fuente}>
+        <ViaCta cta={via.cta} evento={`via_${via.id}_video_cita`} acento />
+      </VideoModal>
+    )
+  }
 </article>
 
 <style>

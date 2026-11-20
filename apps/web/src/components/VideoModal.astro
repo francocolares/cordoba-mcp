@@ -1,16 +1,16 @@
 ---
-import { VIDEO_PRESENTACION } from "../data/content";
-
 interface Props {
   id: string;
   titulo: string;
+  fuente: string;
 }
 
-const { id, titulo } = Astro.props;
+const { id, titulo, fuente } = Astro.props;
+const conPie = Astro.slots.has("default");
 ---
 
-<dialog id={id} data-video={VIDEO_PRESENTACION} data-telon aria-label={titulo} class="sala">
-  <div class="escena">
+<dialog id={id} data-video={fuente} data-telon aria-label={titulo} class="sala">
+  <div class:list={["escena", conPie && "con-pie"]}>
     <button type="button" data-cerrar aria-label="Cerrar el video" class="cerrar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
         <path d="M6.5 6.5l11 11M17.5 6.5l-11 11"></path>
@@ -104,6 +104,14 @@ const { id, titulo } = Astro.props;
           </div>
         </div>
       </div>
+
+      {
+        conPie && (
+          <div class="pie">
+            <slot />
+          </div>
+        )
+      }
     </div>
   </div>
 </dialog>
@@ -142,9 +150,22 @@ const { id, titulo } = Astro.props;
   }
 
   .escena {
+    --reserva: 7rem;
     position: relative;
-    width: min(100%, 72rem, calc((100dvh - 7rem) * 16 / 9));
+    width: min(100%, 72rem, calc((100dvh - var(--reserva)) * 16 / 9));
     padding: 3.25rem 1rem 1rem;
+  }
+
+  .escena.con-pie {
+    --reserva: 11.5rem;
+  }
+
+  .pie {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: center;
+    padding-top: 1.25rem;
   }
 
   .cerrar {
@@ -218,6 +239,7 @@ const { id, titulo } = Astro.props;
     filter: blur(60px);
     mix-blend-mode: screen;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 760ms ease-out 120ms;
   }
 
@@ -628,8 +650,16 @@ const { id, titulo } = Astro.props;
 
   @media (max-height: 34rem) {
     .escena {
-      width: min(100%, 72rem, calc((100dvh - 2rem) * 16 / 9));
+      --reserva: 2rem;
       padding: 0.75rem;
+    }
+
+    .escena.con-pie {
+      --reserva: 5.5rem;
+    }
+
+    .pie {
+      padding-top: 0.75rem;
     }
 
     .cerrar {

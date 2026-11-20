@@ -1,4 +1,5 @@
 ---
+import { VIDEO_PRESENTACION } from "../data/content";
 import BrandIcon from "./BrandIcon.astro";
 import PlayIcon from "./PlayIcon.astro";
 import VideoModal from "./VideoModal.astro";
@@ -27,4 +28,4 @@ const modal = "video-presentacion";
   </button>
 </div>
 
-<VideoModal id={modal} titulo="Video de presentación de Córdoba MCP" />
+<VideoModal id={modal} titulo="Video de presentación de Córdoba MCP" fuente={VIDEO_PRESENTACION} />

@@ -1,0 +1,33 @@
+---
+import type { Via } from "../data/content";
+import BrandIcon from "./BrandIcon.astro";
+import SourceIcon from "./SourceIcon.astro";
+
+interface Props {
+  cta: Via["cta"];
+  evento: string;
+  acento: boolean;
+}
+
+const { cta, evento, acento } = Astro.props;
+
+const esExterno = !cta.href.startsWith("mailto:") && !cta.href.startsWith("#");
+---
+
+<a
+  href={cta.href}
+  data-evento={evento}
+  target={esExterno ? "_blank" : undefined}
+  rel={esExterno ? "noopener noreferrer" : undefined}
+  class:list={[
+    "inline-flex items-center gap-2 rounded-card px-4 py-2.5 text-sm font-medium no-underline transition-colors",
+    acento
+      ? "bg-accent text-jet hover:bg-accent-soft"
+      : "border border-line-strong bg-bg text-ink hover:bg-white/[0.06]",
+  ]}
+>
+  {cta.marca && <BrandIcon name={cta.marca} class="size-[18px]" />}
+  {cta.icono && <SourceIcon name={cta.icono} class="size-[18px]" />}
+  {cta.texto}
+  {esExterno && <span aria-hidden="true" class="opacity-60">↗</span>}
+</a>
