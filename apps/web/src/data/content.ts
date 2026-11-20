@@ -5,6 +5,8 @@ export const ENDPOINT = "https://cordobamcp.com/mcp";
 export const REPO = "https://github.com/francocolares/cordoba-mcp";
 /** Invitación al grupo de WhatsApp de la comunidad. */
 export const COMUNIDAD = "https://chat.whatsapp.com/GvyIE2o8rCI6dYL2M2dJNV";
+export const VIDEO_PRESENTACION =
+  "https://player.vimeo.com/video/1248508965?controls=0&title=0&byline=0&portrait=0&pip=0&keyboard=0&dnt=1&autoplay=1&playsinline=1";
 /** Casilla de contacto del proyecto. */
 export const CONTACTO = "hola@fecocode.com";
 export const BAJA_DATOS = `mailto:${CONTACTO}?subject=${encodeURIComponent(

@@ -25,6 +25,7 @@ export const WEB_EVENTS = [
   "conectar_claude",
   /** Botón de copiar la dirección del servidor: el paso previo a conectarse. */
   "copiar_endpoint",
+  "ver_video",
   /** Instructivo oficial de conectores de Claude. */
   "docs_claude",
   /** Invitación a la comunidad de WhatsApp. */

@@ -1,0 +1,1035 @@
+---
+import { VIDEO_PRESENTACION } from "../data/content";
+
+interface Props {
+  id: string;
+  titulo: string;
+}
+
+const { id, titulo } = Astro.props;
+---
+
+<dialog id={id} data-video={VIDEO_PRESENTACION} data-telon aria-label={titulo} class="sala">
+  <div class="escena">
+    <button type="button" data-cerrar aria-label="Cerrar el video" class="cerrar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+        <path d="M6.5 6.5l11 11M17.5 6.5l-11 11"></path>
+      </svg>
+    </button>
+
+    <div class="tarima">
+      <div class="hoja" data-hoja>
+        <div class="brasa" aria-hidden="true"></div>
+
+        <div class="marco">
+          <iframe
+            data-marco
+            title={titulo}
+            allow="autoplay; fullscreen; encrypted-media"
+            referrerpolicy="strict-origin-when-cross-origin"></iframe>
+
+          <div class="telon" aria-hidden="true"></div>
+          <div class="brillo" aria-hidden="true"></div>
+
+          <button type="button" data-alternar aria-label="Reproducir el video" class="velo">
+            <span class="medalla" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M9.5 6.6l8.4 5.4-8.4 5.4z"></path>
+              </svg>
+            </span>
+          </button>
+
+        </div>
+
+        <div class="mandos" data-mandos>
+          <div class="pista" data-pista>
+            <input
+              type="range"
+              data-linea
+              min="0"
+              max="1000"
+              value="0"
+              step="1"
+              aria-label="Avanzar el video"
+              class="linea"
+            />
+            <span class="globo" data-globo aria-hidden="true">0:00</span>
+          </div>
+
+          <div class="isla isla-izq">
+            <button type="button" data-reproducir aria-label="Reproducir" class="mando">
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path data-glifo-play d="M8.5 5.4l10 6.6-10 6.6z"></path>
+                <path data-glifo-pausa d="M7.5 5.5h3.2v13H7.5zM13.3 5.5h3.2v13h-3.2z"></path>
+              </svg>
+            </button>
+
+            <div class="sonido">
+              <button type="button" data-silencio aria-label="Silenciar" class="mando">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M4 9.5h3L11.5 6v12L7 14.5H4z"></path>
+                  <path data-onda d="M15 9.4a3.6 3.6 0 0 1 0 5.2M17.6 7a7.2 7.2 0 0 1 0 10"
+                  ></path>
+                  <path data-cruz d="M15.4 9.8l4.4 4.4M19.8 9.8l-4.4 4.4"></path>
+                </svg>
+              </button>
+
+              <input
+                type="range"
+                data-volumen
+                min="0"
+                max="100"
+                value="100"
+                step="1"
+                aria-label="Volumen"
+                class="volumen"
+              />
+            </div>
+
+          </div>
+
+          <div class="isla isla-der">
+            <span data-tiempo class="tiempo">0:00</span>
+
+            <button type="button" data-pantalla aria-label="Pantalla completa" class="mando">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <path
+                  data-abrir-pantalla
+                  d="M9 4.8H4.8V9M15 4.8h4.2V9M9 19.2H4.8V15M15 19.2h4.2V15"></path>
+                <path
+                  data-salir-pantalla
+                  d="M4.8 9H9V4.8M19.2 9H15V4.8M4.8 15H9v4.2M19.2 15H15v4.2"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<style>
+  .sala {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: transparent;
+    color: var(--color-body);
+  }
+
+  .sala:not([open]) {
+    display: none;
+  }
+
+  .sala::backdrop {
+    background: color-mix(in oklab, var(--color-jet) 80%, transparent);
+    opacity: 0;
+    transition: opacity 320ms ease;
+  }
+
+  .sala[data-abierto]::backdrop {
+    opacity: 1;
+    backdrop-filter: blur(10px) saturate(0.7);
+  }
+
+  .escena {
+    position: relative;
+    width: min(100%, 72rem, calc((100dvh - 7rem) * 16 / 9));
+    padding: 3.25rem 1rem 1rem;
+  }
+
+  .cerrar {
+    position: absolute;
+    z-index: 2;
+    top: 0.5rem;
+    right: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    color: var(--color-fog);
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  .cerrar:hover {
+    color: var(--color-ink);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .cerrar svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  .tarima {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+    transition: opacity 320ms ease, transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sala[data-abierto] .tarima {
+    opacity: 1;
+    transform: none;
+  }
+
+  .hoja {
+    position: relative;
+    padding: 1px;
+    border-radius: calc(var(--radius-card) + 1px);
+    background: linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--color-steel) 85%, transparent) 0%,
+      color-mix(in oklab, var(--color-steel) 55%, transparent) 42%,
+      color-mix(in oklab, var(--color-accent) 60%, transparent) 100%
+    );
+    box-shadow:
+      0 6px 30px -12px color-mix(in oklab, var(--color-accent) 16%, transparent),
+      0 24px 70px -26px color-mix(in oklab, var(--color-accent) 28%, transparent),
+      0 56px 150px -52px color-mix(in oklab, var(--color-accent) 48%, transparent);
+    transform: perspective(1600px) rotateX(var(--giro-x, 0deg)) rotateY(var(--giro-y, 0deg));
+    transform-style: flat;
+    backface-visibility: hidden;
+    transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .brasa {
+    position: absolute;
+    inset: -18%;
+    z-index: -1;
+    background: radial-gradient(
+      ellipse 54% 48% at 50% 62%,
+      color-mix(in oklab, var(--color-accent) 46%, transparent) 0%,
+      color-mix(in oklab, var(--color-accent) 12%, transparent) 42%,
+      rgba(0, 0, 0, 0) 70%
+    );
+    filter: blur(60px);
+    mix-blend-mode: screen;
+    opacity: 0;
+    transition: opacity 760ms ease-out 120ms;
+  }
+
+  .sala[data-abierto] .brasa {
+    opacity: 0.28;
+  }
+
+  .marco {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: var(--radius-card);
+    clip-path: inset(0 round var(--radius-card));
+    background: var(--color-jet);
+  }
+
+  .marco iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: var(--radius-card);
+    pointer-events: none;
+  }
+
+  .telon {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-card);
+    background:
+      radial-gradient(
+        ellipse 68% 58% at 50% 120%,
+        color-mix(in oklab, var(--color-accent) 26%, transparent) 0%,
+        color-mix(in oklab, var(--color-accent) 6%, transparent) 44%,
+        rgba(0, 0, 0, 0) 72%
+      ),
+      var(--color-jet);
+    opacity: 0;
+    transition: opacity 420ms ease;
+  }
+
+  .sala[data-telon] .telon {
+    opacity: 1;
+  }
+
+  .brillo {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-card);
+    background: radial-gradient(
+      26rem 26rem at var(--raton-x, 50%) var(--raton-y, 50%),
+      rgba(255, 255, 255, 0.07),
+      rgba(255, 255, 255, 0) 70%
+    );
+    mix-blend-mode: overlay;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 320ms ease;
+  }
+
+  .sala[data-cerca] .brillo {
+    opacity: 1;
+  }
+
+  .velo {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .medalla {
+    display: grid;
+    place-items: center;
+    width: 4.5rem;
+    height: 4.5rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklab, var(--color-dove) 45%, transparent);
+    background: color-mix(in oklab, var(--color-jet) 55%, transparent);
+    color: var(--color-ink);
+    backdrop-filter: blur(4px);
+    transition: opacity 260ms ease, transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 200ms ease, background-color 200ms ease;
+  }
+
+  .medalla svg {
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-left: 0.15rem;
+  }
+
+  .velo:hover .medalla {
+    border-color: color-mix(in oklab, var(--color-dove) 85%, transparent);
+    background: color-mix(in oklab, var(--color-jet) 72%, transparent);
+    transform: scale(1.05);
+  }
+
+  .sala[data-corriendo] .medalla {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+
+  .mandos {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 6.5rem;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(0.6rem);
+    transition: opacity 240ms ease, transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+      visibility 0s linear 240ms;
+  }
+
+  .isla {
+    position: absolute;
+    bottom: 1.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.25rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: color-mix(in oklab, var(--color-jet) 55%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: 0 8px 28px -14px rgba(0, 0, 0, 0.9);
+    pointer-events: auto;
+  }
+
+  .isla-izq {
+    left: 0.85rem;
+  }
+
+  .isla-der {
+    right: 0.85rem;
+  }
+
+  .sala:not([data-corriendo]) .mandos,
+  .sala[data-tocado] .mandos,
+  .hoja:hover .mandos,
+  .mandos:focus-within {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    transition-delay: 0s;
+  }
+
+  .pista {
+    position: absolute;
+    right: 0.85rem;
+    bottom: 0.1rem;
+    left: 0.85rem;
+    padding: 0.2rem 0;
+    pointer-events: auto;
+  }
+
+  .tiempo {
+    padding: 0 0.5rem 0 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.02em;
+    color: var(--color-dove);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .mando {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    color: var(--color-dove);
+    cursor: pointer;
+    transition: color 160ms ease, background-color 160ms ease;
+  }
+
+  .mando:hover {
+    color: var(--color-ink);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .mando svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  [data-reproducir] [data-glifo-pausa],
+  .sala[data-corriendo] [data-reproducir] [data-glifo-play] {
+    display: none;
+  }
+
+  .sala[data-corriendo] [data-reproducir] [data-glifo-pausa] {
+    display: initial;
+  }
+
+  [data-silencio] [data-cruz],
+  [data-silencio][data-mudo] [data-onda] {
+    display: none;
+  }
+
+  [data-silencio][data-mudo] [data-cruz] {
+    display: initial;
+  }
+
+  [data-pantalla] [data-salir-pantalla],
+  [data-pantalla][data-completa] [data-abrir-pantalla] {
+    display: none;
+  }
+
+  [data-pantalla][data-completa] [data-salir-pantalla] {
+    display: initial;
+  }
+
+  .sonido {
+    display: flex;
+    align-items: center;
+  }
+
+  .volumen {
+    width: 0;
+    opacity: 0;
+    transition: width 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease,
+      margin 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sonido:hover .volumen,
+  .sonido:focus-within .volumen {
+    width: 4.5rem;
+    margin-right: 0.4rem;
+    opacity: 1;
+  }
+
+  .linea,
+  .volumen {
+    display: block;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .linea {
+    width: 100%;
+    height: 0.9rem;
+  }
+
+  .volumen {
+    height: 1.4rem;
+  }
+
+  .linea::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(
+      to right,
+      var(--color-accent) 0 var(--relleno, 0%),
+      rgba(255, 255, 255, 0.34) var(--relleno, 0%) var(--cargado, 0%),
+      rgba(255, 255, 255, 0.14) var(--cargado, 0%) 100%
+    );
+    transition: height 160ms ease;
+  }
+
+  .linea::-moz-range-track {
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(
+      to right,
+      var(--color-accent) 0 var(--relleno, 0%),
+      rgba(255, 255, 255, 0.34) var(--relleno, 0%) var(--cargado, 0%),
+      rgba(255, 255, 255, 0.14) var(--cargado, 0%) 100%
+    );
+  }
+
+  .volumen::-webkit-slider-runnable-track {
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(
+      to right,
+      var(--color-dove) var(--relleno, 100%),
+      rgba(255, 255, 255, 0.16) var(--relleno, 100%)
+    );
+  }
+
+  .volumen::-moz-range-track {
+    height: 3px;
+    border-radius: 3px;
+    background: linear-gradient(
+      to right,
+      var(--color-dove) var(--relleno, 100%),
+      rgba(255, 255, 255, 0.16) var(--relleno, 100%)
+    );
+  }
+
+  .linea::-webkit-slider-thumb {
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    margin-top: -4px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-accent) 24%, transparent);
+    transform: scale(0);
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .linea::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-accent);
+    transform: scale(0);
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .volumen::-webkit-slider-thumb {
+    appearance: none;
+    width: 9px;
+    height: 9px;
+    margin-top: -3px;
+    border-radius: 999px;
+    background: var(--color-ink);
+  }
+
+  .volumen::-moz-range-thumb {
+    width: 9px;
+    height: 9px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--color-ink);
+  }
+
+  .pista:hover .linea::-webkit-slider-runnable-track {
+    height: 5px;
+  }
+
+  .pista:hover .linea::-webkit-slider-thumb {
+    margin-top: -3px;
+    transform: scale(1);
+  }
+
+  .linea:focus-visible::-webkit-slider-thumb,
+  .pista:hover .linea::-moz-range-thumb,
+  .linea:focus-visible::-moz-range-thumb {
+    transform: scale(1);
+  }
+
+  .linea:focus-visible,
+  .volumen:focus-visible {
+    outline-offset: 3px;
+  }
+
+  .globo {
+    position: absolute;
+    bottom: 1.6rem;
+    left: var(--raton-linea, 50%);
+    transform: translateX(-50%);
+    padding: 0.2rem 0.4rem;
+    border-radius: var(--radius-xs);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: color-mix(in oklab, var(--color-jet) 88%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    color: var(--color-dove);
+    font-variant-numeric: tabular-nums;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 140ms ease;
+  }
+
+  .pista:hover .globo {
+    opacity: 1;
+  }
+
+  .hoja:fullscreen {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border-radius: 0;
+    background: var(--color-jet);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .hoja:fullscreen .brasa {
+    display: none;
+  }
+
+  .hoja:fullscreen .marco {
+    width: 100%;
+    max-width: calc(100vh * 16 / 9);
+    border-radius: 0;
+    clip-path: none;
+  }
+
+  .hoja:fullscreen .marco iframe,
+  .hoja:fullscreen .telon {
+    border-radius: 0;
+  }
+
+  @media (max-height: 34rem) {
+    .escena {
+      width: min(100%, 72rem, calc((100dvh - 2rem) * 16 / 9));
+      padding: 0.75rem;
+    }
+
+    .cerrar {
+      top: 1.1rem;
+      right: 1.1rem;
+      color: var(--color-dove);
+      background: color-mix(in oklab, var(--color-jet) 62%, transparent);
+      backdrop-filter: blur(14px);
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .hoja {
+      transform: none;
+    }
+
+    .brillo,
+    .globo,
+    .volumen {
+      display: none;
+    }
+
+    .mando {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .linea {
+      height: 1.3rem;
+    }
+
+    .medalla {
+      width: 3.75rem;
+      height: 3.75rem;
+    }
+
+    .mandos {
+      height: 7rem;
+    }
+
+    .isla {
+      bottom: 1.25rem;
+    }
+
+    .isla-izq {
+      left: 0.6rem;
+    }
+
+    .isla-der {
+      right: 0.6rem;
+    }
+
+    .pista {
+      right: 0.6rem;
+      left: 0.6rem;
+    }
+  }
+
+  @media (hover: none) and (orientation: portrait) {
+    .marco {
+      border-radius: var(--radius-card) var(--radius-card) 0 0;
+      clip-path: inset(0 round var(--radius-card) var(--radius-card) 0 0);
+    }
+
+    .marco iframe,
+    .telon {
+      border-radius: var(--radius-card) var(--radius-card) 0 0;
+    }
+
+    .mandos {
+      position: static;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      height: auto;
+      padding: 0.1rem 0.5rem 0.35rem;
+      border-top: 1px solid var(--color-line);
+      border-radius: 0 0 var(--radius-card) var(--radius-card);
+      background: var(--color-charcoal);
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+      pointer-events: auto;
+    }
+
+    .pista {
+      position: static;
+      flex: 0 0 100%;
+      padding: 0.35rem 0.25rem 0;
+    }
+
+    .isla {
+      position: static;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      backdrop-filter: none;
+      box-shadow: none;
+    }
+
+    .isla-der {
+      margin-left: auto;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sala::backdrop,
+    .tarima,
+    .hoja,
+    .brasa,
+    .telon,
+    .brillo,
+    .medalla,
+    .mandos,
+    .volumen,
+    .linea::-webkit-slider-runnable-track,
+    .linea::-webkit-slider-thumb {
+      transition: none;
+    }
+
+    .tarima,
+    .hoja {
+      transform: none;
+    }
+
+    .sala[data-corriendo] .medalla {
+      transform: none;
+    }
+
+    .mandos {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+    }
+  }
+</style>
+
+<script>
+  import type VimeoPlayer from "@vimeo/player";
+
+  const INCLINACION = 3.2;
+  const SALTO = 5;
+
+  const reloj = (segundos: number) => {
+    const total = Math.max(0, Math.floor(segundos));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  };
+
+  for (const sala of document.querySelectorAll<HTMLDialogElement>("[data-video]")) {
+    const fuente = sala.dataset.video;
+    const marco = sala.querySelector<HTMLIFrameElement>("[data-marco]");
+    const hoja = sala.querySelector<HTMLElement>("[data-hoja]");
+    const alternar = sala.querySelector<HTMLButtonElement>("[data-alternar]");
+    const reproducir = sala.querySelector<HTMLButtonElement>("[data-reproducir]");
+    const pista = sala.querySelector<HTMLElement>("[data-pista]");
+    const linea = sala.querySelector<HTMLInputElement>("[data-linea]");
+    const globo = sala.querySelector<HTMLElement>("[data-globo]");
+    const volumen = sala.querySelector<HTMLInputElement>("[data-volumen]");
+    const tiempo = sala.querySelector<HTMLElement>("[data-tiempo]");
+    const silencio = sala.querySelector<HTMLButtonElement>("[data-silencio]");
+    const pantalla = sala.querySelector<HTMLButtonElement>("[data-pantalla]");
+    if (
+      !fuente ||
+      !marco ||
+      !hoja ||
+      !alternar ||
+      !reproducir ||
+      !pista ||
+      !linea ||
+      !globo ||
+      !volumen ||
+      !tiempo ||
+      !silencio ||
+      !pantalla
+    ) {
+      continue;
+    }
+
+    const punteroFino = matchMedia("(hover: hover) and (pointer: fine)");
+    const sinMovimiento = matchMedia("(prefers-reduced-motion: reduce)");
+
+    let player: VimeoPlayer | null = null;
+    let cargando: Promise<VimeoPlayer> | null = null;
+    let duracion = 0;
+    let arrastrando = false;
+    let ocioso = 0;
+    let cierre = 0;
+
+    const corriendo = () => sala.hasAttribute("data-corriendo");
+
+    const enderezar = () => {
+      sala.removeAttribute("data-cerca");
+      hoja.style.removeProperty("--giro-x");
+      hoja.style.removeProperty("--giro-y");
+    };
+
+    const marcarCorriendo = (valor: boolean) => {
+      sala.toggleAttribute("data-corriendo", valor);
+      alternar.setAttribute("aria-label", valor ? "Pausar el video" : "Reproducir el video");
+      reproducir.setAttribute("aria-label", valor ? "Pausar" : "Reproducir");
+    };
+
+    const terminar = () => {
+      marcarCorriendo(false);
+      sala.setAttribute("data-telon", "");
+      void player?.setCurrentTime(0).then(() => player?.pause());
+    };
+
+    const mostrarMandos = () => {
+      sala.setAttribute("data-tocado", "");
+      clearTimeout(ocioso);
+      ocioso = window.setTimeout(() => sala.removeAttribute("data-tocado"), 2600);
+    };
+
+    const pintar = (segundos: number) => {
+      const avance = duracion > 0 ? Math.min(1, segundos / duracion) : 0;
+      if (!arrastrando) linea.value = String(Math.round(avance * 1000));
+      linea.style.setProperty("--relleno", `${(avance * 100).toFixed(2)}%`);
+      tiempo.textContent =
+        duracion > 0 ? `${reloj(segundos)} / ${reloj(duracion)}` : reloj(segundos);
+    };
+
+    const crear = async () => {
+      const { default: Player } = await import("@vimeo/player");
+      marco.src = fuente;
+      const instancia = new Player(marco);
+
+      instancia.on("play", () => {
+        sala.removeAttribute("data-telon");
+        marcarCorriendo(true);
+      });
+      instancia.on("pause", () => marcarCorriendo(false));
+      instancia.on("ended", terminar);
+      instancia.on("timeupdate", ({ seconds, duration }) => {
+        duracion = duration;
+        pintar(seconds);
+      });
+      instancia.on("progress", ({ percent }) => {
+        linea.style.setProperty("--cargado", `${(percent * 100).toFixed(2)}%`);
+      });
+      instancia.on("volumechange", ({ volume }) => {
+        const mudo = volume === 0;
+        silencio.toggleAttribute("data-mudo", mudo);
+        silencio.setAttribute("aria-label", mudo ? "Activar el sonido" : "Silenciar");
+        volumen.value = String(Math.round(volume * 100));
+        volumen.style.setProperty("--relleno", `${(volume * 100).toFixed(0)}%`);
+      });
+
+      void instancia.getDuration().then((valor) => {
+        duracion = valor;
+        pintar(0);
+      });
+
+      return instancia;
+    };
+
+    const abrir = async () => {
+      clearTimeout(cierre);
+      sala.showModal();
+      requestAnimationFrame(() => sala.setAttribute("data-abierto", ""));
+      mostrarMandos();
+      cargando ??= crear().then((instancia) => (player = instancia));
+      const instancia = await cargando;
+      if (sala.open) void instancia.play().catch(() => marcarCorriendo(false));
+    };
+
+    const cerrar = () => {
+      void player?.pause();
+      sala.removeAttribute("data-abierto");
+      enderezar();
+      if (document.fullscreenElement === hoja) void document.exitFullscreen();
+      clearTimeout(cierre);
+      cierre = window.setTimeout(() => sala.close(), 420);
+    };
+
+    const alternarVideo = () => {
+      if (!player) return;
+      void (corriendo() ? player.pause() : player.play());
+    };
+
+    const saltar = (segundos: number) => {
+      if (!player || duracion <= 0) return;
+      void player.getCurrentTime().then((actual) => {
+        void player?.setCurrentTime(Math.min(duracion, Math.max(0, actual + segundos)));
+      });
+    };
+
+    for (const disparador of document.querySelectorAll<HTMLElement>(
+      `[data-abrir-video="${sala.id}"]`,
+    )) {
+      disparador.addEventListener("click", () => void abrir());
+    }
+
+    sala.querySelector<HTMLButtonElement>("[data-cerrar]")?.addEventListener("click", cerrar);
+
+    sala.addEventListener("cancel", (evento) => {
+      evento.preventDefault();
+      cerrar();
+    });
+
+    sala.addEventListener("click", (evento) => {
+      if (evento.target === sala || evento.target === sala.firstElementChild) cerrar();
+    });
+
+    alternar.addEventListener("click", alternarVideo);
+    reproducir.addEventListener("click", alternarVideo);
+
+    sala.addEventListener("keydown", (evento) => {
+      if (evento.target instanceof HTMLInputElement) return;
+      const tecla = evento.key.toLowerCase();
+      if (tecla === " " || tecla === "k") {
+        evento.preventDefault();
+        alternarVideo();
+      } else if (tecla === "arrowright") {
+        evento.preventDefault();
+        saltar(SALTO);
+      } else if (tecla === "arrowleft") {
+        evento.preventDefault();
+        saltar(-SALTO);
+      } else if (tecla === "m") {
+        silencio.click();
+      } else if (tecla === "f") {
+        pantalla.click();
+      } else {
+        return;
+      }
+      mostrarMandos();
+    });
+
+    sala.addEventListener("pointermove", (evento) => {
+      mostrarMandos();
+      if (!punteroFino.matches || document.fullscreenElement === hoja) return;
+
+      const caja = hoja.getBoundingClientRect();
+      const x = (evento.clientX - caja.left) / caja.width;
+      const y = (evento.clientY - caja.top) / caja.height;
+      if (x < -0.35 || x > 1.35 || y < -0.5 || y > 1.5) {
+        enderezar();
+        return;
+      }
+
+      sala.setAttribute("data-cerca", "");
+      hoja.style.setProperty("--raton-x", `${(x * 100).toFixed(1)}%`);
+      hoja.style.setProperty("--raton-y", `${(y * 100).toFixed(1)}%`);
+      if (sinMovimiento.matches) return;
+      hoja.style.setProperty("--giro-x", `${((0.5 - y) * 2 * INCLINACION).toFixed(2)}deg`);
+      hoja.style.setProperty("--giro-y", `${((x - 0.5) * 2 * INCLINACION).toFixed(2)}deg`);
+    });
+
+    sala.addEventListener("pointerleave", enderezar);
+
+    pista.addEventListener("pointermove", (evento) => {
+      const caja = pista.getBoundingClientRect();
+      const avance = Math.min(1, Math.max(0, (evento.clientX - caja.left) / caja.width));
+      pista.style.setProperty("--raton-linea", `${(avance * 100).toFixed(1)}%`);
+      globo.textContent = reloj(avance * duracion);
+    });
+
+    linea.addEventListener("pointerdown", () => {
+      arrastrando = true;
+    });
+
+    linea.addEventListener("input", () => {
+      const avance = Number(linea.value) / 1000;
+      linea.style.setProperty("--relleno", `${(avance * 100).toFixed(2)}%`);
+      if (duracion > 0) tiempo.textContent = `${reloj(avance * duracion)} / ${reloj(duracion)}`;
+    });
+
+    linea.addEventListener("change", () => {
+      arrastrando = false;
+      if (player && duracion > 0) {
+        void player.setCurrentTime((Number(linea.value) / 1000) * duracion);
+      }
+    });
+
+    volumen.addEventListener("input", () => {
+      const nivel = Number(volumen.value) / 100;
+      volumen.style.setProperty("--relleno", `${(nivel * 100).toFixed(0)}%`);
+      void player?.setVolume(nivel);
+    });
+
+    silencio.addEventListener("click", () => {
+      if (!player) return;
+      void player.getVolume().then((nivel) => player?.setVolume(nivel === 0 ? 1 : 0));
+    });
+
+    pantalla.addEventListener("click", () => {
+      if (document.fullscreenElement === hoja) void document.exitFullscreen();
+      else void hoja.requestFullscreen().catch(() => {});
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      const completa = document.fullscreenElement === hoja;
+      pantalla.toggleAttribute("data-completa", completa);
+      pantalla.setAttribute(
+        "aria-label",
+        completa ? "Salir de pantalla completa" : "Pantalla completa",
+      );
+      if (completa) enderezar();
+    });
+  }
+</script>

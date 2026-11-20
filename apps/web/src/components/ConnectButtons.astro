@@ -1,6 +1,9 @@
 ---
-import { COMUNIDAD } from "../data/content";
 import BrandIcon from "./BrandIcon.astro";
+import PlayIcon from "./PlayIcon.astro";
+import VideoModal from "./VideoModal.astro";
+
+const modal = "video-presentacion";
 ---
 
 <div class="flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
@@ -13,14 +16,15 @@ import BrandIcon from "./BrandIcon.astro";
     Conectar con Claude
   </a>
 
-  <a
-    href={COMUNIDAD}
-    data-evento="comunidad"
-    target="_blank"
-    rel="noopener noreferrer"
-    class="inline-flex items-center justify-center gap-2.5 rounded-card border border-line-strong bg-surface px-5 py-3 text-sm font-medium text-ink no-underline transition-colors hover:bg-white/[0.06]"
+  <button
+    type="button"
+    data-abrir-video={modal}
+    data-evento="ver_video"
+    class="inline-flex items-center justify-center gap-2.5 rounded-card border border-line-strong bg-surface px-5 py-3 text-sm font-medium text-ink transition-colors hover:bg-white/[0.06]"
   >
-    <BrandIcon name="whatsapp-monochrome-icon" class="size-[18px]" />
-    Unirse a la comunidad
-  </a>
+    <PlayIcon class="size-[18px]" />
+    Conocé más
+  </button>
 </div>
+
+<VideoModal id={modal} titulo="Video de presentación de Córdoba MCP" />
