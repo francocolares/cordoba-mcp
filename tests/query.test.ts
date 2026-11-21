@@ -98,6 +98,26 @@ describe("searchEvents", () => {
     expect(searchEvents(events, { include_past: true }, NOW).map((e) => e.id)[0]).toBe("pasado");
   });
 
+  it("mantiene los eventos de la noche hasta que terminan en hora de Córdoba", () => {
+    const nocturnos = [
+      ev({
+        id: "con_fin",
+        start: "2026-11-12T20:00:00-03:00",
+        end: "2026-11-12T22:00:00-03:00",
+      }),
+      ev({ id: "sin_fin", start: "2026-11-12T21:00:00-03:00" }),
+      ev({
+        id: "terminado",
+        start: "2026-11-12T18:00:00-03:00",
+        end: "2026-11-12T20:00:00-03:00",
+      }),
+    ];
+    const ids = (now: string) => searchEvents(nocturnos, {}, new Date(now)).map((e) => e.id);
+    expect(ids("2026-11-12T23:30:00Z")).toEqual(["con_fin", "sin_fin"]);
+    expect(ids("2026-11-13T01:30:00Z")).toEqual(["sin_fin"]);
+    expect(ids("2026-11-13T03:00:00Z")).toEqual([]);
+  });
+
   it("busca sin tildes en título, lugar y descripción", () => {
     expect(searchEvents(events, { query: "musica" }, NOW).map((e) => e.id)).toEqual(["hoy1"]);
     expect(searchEvents(events, { query: "PABELLON tornu" }, NOW).map((e) => e.id)).toEqual([
