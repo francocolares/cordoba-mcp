@@ -67,7 +67,6 @@ export function searchEvents(
   now: Date = new Date(),
 ): Event[] {
   const limit = params.limit ?? 20;
-  const nowIso = now.toISOString();
   const from = params.date_from ? resolveDateInput(params.date_from, now) : null;
   const to = params.date_to ? resolveDateInput(params.date_to, now) : null;
   const fromIso = from ? toIso(from, { hour: 0, minute: 0 }) : null;
@@ -79,7 +78,7 @@ export function searchEvents(
     .filter((e) => (params.free_only ? e.price_type === "gratis" : true))
     .filter((e) => (category ? e.category === category : true))
     .filter((e) => (params.query ? matchesText(e, params.query) : true))
-    .filter((e) => (params.include_past ? true : endsAt(e) >= nowIso))
+    .filter((e) => (params.include_past ? true : Date.parse(endsAt(e)) >= now.getTime()))
     .filter((e) => (fromIso ? endsAt(e) >= fromIso : true))
     .filter((e) => (toIsoBound ? e.start < toIsoBound : true))
     .sort(byStart)
