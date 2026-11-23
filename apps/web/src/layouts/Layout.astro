@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import { CONTACTO, REPO } from "../data/content";
 
 interface Props {
   title: string;
@@ -14,6 +15,32 @@ const TEXTO_DE_LA_IMAGEN = "Los datos abiertos de Córdoba, al alcance de tu age
 
 const canonica = new URL(Astro.url.pathname, Astro.site);
 const imagen = new URL(IMAGEN_SOCIAL, Astro.site);
+const raiz = new URL("/", Astro.site);
+
+const datosEstructurados = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": `${raiz}#sitio`,
+      url: raiz.href,
+      name: SITIO,
+      description,
+      inLanguage: "es-AR",
+      publisher: { "@id": `${raiz}#organizacion` },
+    },
+    {
+      "@type": "Organization",
+      "@id": `${raiz}#organizacion`,
+      name: SITIO,
+      url: raiz.href,
+      logo: imagen.href,
+      email: CONTACTO,
+      areaServed: "Córdoba, Argentina",
+      sameAs: [REPO],
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -40,6 +67,7 @@ const imagen = new URL(IMAGEN_SOCIAL, Astro.site);
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={imagen} />
     <meta name="twitter:image:alt" content={TEXTO_DE_LA_IMAGEN} />
+    <script type="application/ld+json" set:html={JSON.stringify(datosEstructurados)} is:inline />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#0a0a0a" />
     <!-- Lo genera `src/pages/favicon.svg.ts` a partir del isotipo. -->
