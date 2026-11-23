@@ -9,6 +9,7 @@ export * from "./config.js";
 export * from "./dataset.js";
 export * from "./datetime.js";
 export * from "./errors.js";
+export * from "./exportadores/index.js";
 export * from "./farmacias/index.js";
 export * from "./gviz.js";
 export * from "./ids.js";

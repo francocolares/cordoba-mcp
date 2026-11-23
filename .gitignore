@@ -31,3 +31,9 @@ validation.json
 # lee de R2 (apps/worker/scripts/sync-r2.mjs), no del repo. Commitearlos sólo
 # hacía crecer el clone ~30 MB por año sin que nadie los consuma.
 data/raw/
+
+# El dataset de exportadores queda fuera del repo hasta que ProCórdoba confirme
+# por escrito que podemos republicarlo: su sitio declara `ai-train=no` y pide
+# atribución. El código para generarlo y servirlo ya está. Para publicarlo,
+# borrá esta línea.
+data/exportadores/

@@ -12,6 +12,7 @@ export * from "./collections.js";
 export * from "./config.js";
 export * from "./datetime.js";
 export * from "./errors.js";
+export * from "./exportadores/web.js";
 export * from "./farmacias/web.js";
 export * from "./ids.js";
 export * from "./jsonl.js";

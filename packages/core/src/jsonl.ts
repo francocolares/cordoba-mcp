@@ -3,6 +3,8 @@
  * (filesystem) y el Worker (objetos de R2).
  */
 
+import type { Exporter } from "./exportadores/models.js";
+import { ExporterSchema } from "./exportadores/models.js";
 import type { Pharmacy } from "./farmacias/models.js";
 import { PharmacySchema } from "./farmacias/models.js";
 import { type Event, EventSchema } from "./models.js";
@@ -29,6 +31,16 @@ export function parsePharmaciesJsonl(text: string): Pharmacy[] {
     const parsed = PharmacySchema.safeParse(JSON.parse(line));
     if (!parsed.success) {
       throw new Error(`pharmacies.jsonl línea ${i + 1} inválida: ${parsed.error.message}`);
+    }
+    return parsed.data;
+  });
+}
+
+export function parseExportersJsonl(text: string): Exporter[] {
+  return lines(text).map((line, i) => {
+    const parsed = ExporterSchema.safeParse(JSON.parse(line));
+    if (!parsed.success) {
+      throw new Error(`companies.jsonl línea ${i + 1} inválida: ${parsed.error.message}`);
     }
     return parsed.data;
   });

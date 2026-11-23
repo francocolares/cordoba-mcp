@@ -1,4 +1,9 @@
 User-agent: *
 Allow: /
+# El Directorio de Exportadores de ProCórdoba declara ai-train=no en su propio
+# robots.txt. Lo servimos para consulta, no como dataset para rastrear: las
+# respuestas de esas rutas repiten la señal en el header Content-Signal.
+Disallow: /api/exportadores.jsonl
+Disallow: /api/exportadores/
 
 Sitemap: https://cordobamcp.com/sitemap.xml

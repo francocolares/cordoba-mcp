@@ -58,10 +58,18 @@ jobs:
           set -euo pipefail
           BASE="${PROD_URL:-https://cordobamcp.com}"
           case "$BASE" in http://* | https://*) ;; *) BASE="https://$BASE" ;; esac
+          # Se exige sólo lo que este run subió. Una colección declarada en el
+          # código pero sin dataset en `data/` todavía no está publicada, y no
+          # tiene por qué hacer fallar la publicación de las que sí lo están.
+          IDS=$(node -e 'import("./apps/worker/scripts/sync-r2.mjs").then(({ buildManifest }) => console.log(JSON.stringify(Object.keys(buildManifest().manifest.collections))))')
+          echo "Publicadas en este run: $IDS"
           # El manifest se cachea 60s por isolate: reintentamos un rato.
           for i in $(seq 1 10); do
-            if curl -fsS --max-time 10 "$BASE/health" \
-              | jq -e '.data_source.error == null and (.collections | all(.available))' > /dev/null; then
+            if curl -fsS --max-time 10 "$BASE/health" | jq -e --argjson ids "$IDS" '
+                 .data_source.error == null
+                 and ([.collections[] | select(.id | IN($ids[]))] | length == ($ids | length))
+                 and ([.collections[] | select(.id | IN($ids[])) | .available] | all)
+               ' > /dev/null; then
               echo "$BASE sirviendo los datos de R2 (intento $i)"
               exit 0
             fi

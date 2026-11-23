@@ -56,7 +56,11 @@ describe("rutas del Worker", () => {
       collections: { id: string; available: boolean; records?: number; data_as_of?: string }[];
     };
     expect(body.ok).toBe(true);
-    expect(body.collections.map((c) => c.id)).toEqual(["eventos", "farmacias_turno"]);
+    expect(body.collections.map((c) => c.id)).toEqual([
+      "eventos",
+      "farmacias_turno",
+      "exportadores",
+    ]);
 
     const eventos = body.collections.find((c) => c.id === "eventos")!;
     expect(eventos.records).toBe(EVENTS.length);
@@ -258,6 +262,7 @@ describe("JSON-RPC del MCP", () => {
     expect(catalog.collections.map((c: { id: string }) => c.id)).toEqual([
       "eventos",
       "farmacias_turno",
+      "exportadores",
     ]);
     expect(catalog.collections[0].sources[0].name).toBeTruthy();
 

@@ -140,7 +140,7 @@ describe("list_collections", () => {
   it("publica filtros y soporte de cada colección sin pedirlo", () => {
     const { data } = call("list_collections");
     const list = data["collections"] as { id: string; filters: unknown[]; supports: unknown }[];
-    expect(list.map((c) => c.id)).toEqual(["eventos", "farmacias_turno"]);
+    expect(list.map((c) => c.id)).toEqual(["eventos", "farmacias_turno", "exportadores"]);
     expect(list[0]!.filters.length).toBeGreaterThan(0);
     expect(list[0]!.supports).toMatchObject({ near: false, date: "range" });
   });
@@ -164,7 +164,7 @@ describe("list_collections", () => {
     const result = call("list_collections", { collection: "farmacias" });
     expect(result.isError).toBe(true);
     expect(errorOf(result).code).toBe("unknown_collection");
-    expect(errorOf(result).valid_values).toEqual(["eventos", "farmacias_turno"]);
+    expect(errorOf(result).valid_values).toEqual(["eventos", "farmacias_turno", "exportadores"]);
   });
 });
 
@@ -444,9 +444,10 @@ describe("source_status", () => {
   it("reporta cada colección con su fuente y sus conteos", () => {
     const { data } = call("source_status");
     const list = data["collections"] as Record<string, unknown>[];
-    expect(list).toHaveLength(2);
+    expect(list).toHaveLength(3);
     expect(list[0]).toMatchObject({ id: "eventos", available: true, records: 3 });
     expect(list[1]).toMatchObject({ id: "farmacias_turno", geocoded: 2, years: [2026] });
+    expect(list[2]).toMatchObject({ id: "exportadores", available: false });
   });
 
   it("marca la colección que no está cargada", () => {

@@ -1,0 +1,227 @@
+name: exportadores-directorio
+
+# El directorio de ProCórdoba es un padrón, no un feed: no entra en el cron
+# diario. Este workflow hace dos cosas distintas:
+#   - `check` (cron mensual): baja sólo el listado (1 request) y avisa si el
+#     conjunto de fichas cambió o si el template se rompió.
+#   - `crawl` (a mano): recorre las ~2.600 fichas a 1,5 s cada una (poco más de
+#     una hora), valida, commitea el dataset normalizado y lo publica en R2.
+on:
+  schedule:
+    - cron: "17 10 7 * *" # día 7 de cada mes, 07:17 hora de Córdoba
+  workflow_dispatch:
+    inputs:
+      crawl:
+        description: "Recorrer las fichas y commitear (si no, sólo chequea el listado)"
+        type: boolean
+        default: false
+      limit:
+        description: "Máximo de fichas a recorrer (vacío = todas)"
+        type: string
+        required: false
+      ids:
+        description: "Sólo estas fichas, separadas por coma (vacío = todas)"
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: exportadores-directorio
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'schedule' || inputs.crawl != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # Una sola request al listado: alcanza para saber si entraron o salieron
+      # empresas, y es lo que decide si vale la pena un recorrido completo.
+      - id: check
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          node apps/scraper/dist/index.js exportadores check > listado.json
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+          {
+            echo "changed=$(jq -r '.changed' listado.json)"
+            echo "total=$(jq -r '.directory_total' listado.json)"
+            echo "previous=$(jq -r '.previous_total // "sin-dato"' listado.json)"
+            echo "delta=$(jq -r '.delta // "sin-dato"' listado.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Abrir issue si el listado cambió o no se pudo leer
+        if: steps.check.outputs.changed != 'false' || steps.check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const check = ${{ toJSON(steps.check.outputs) }};
+            const failed = ${{ toJSON(steps.check.outcome) }} === 'failure';
+            const body = [];
+            if (failed) {
+              body.push('### No se pudo leer el listado del directorio');
+              body.push('');
+              body.push('El comando falló: puede ser el sitio caído o el template cambiado. Si cambió el template, lo que hay que arreglar es `packages/core/src/exportadores/parse.ts`.');
+            } else {
+              body.push('### El directorio de exportadores cambió');
+              body.push('');
+              body.push(`- fichas en el listado: \`${check.total}\``);
+              body.push(`- fichas en el dataset publicado: \`${check.previous}\``);
+              body.push(`- diferencia: \`${check.delta}\``);
+              body.push('');
+              body.push('Para actualizarlo: Actions -> exportadores-directorio -> Run workflow, con `crawl: true`. El recorrido completo tarda poco más de una hora (1 request por ficha, 1,5 s entre requests).');
+            }
+            body.push('');
+            body.push('<details><summary>Salida del check</summary>');
+            body.push('');
+            body.push('```json');
+            body.push(fs.existsSync('listado.json') ? fs.readFileSync('listado.json', 'utf8') : 'sin salida');
+            body.push('```');
+            body.push('</details>');
+
+            const title = failed
+              ? 'No se pudo leer el directorio de exportadores'
+              : 'El directorio de exportadores cambió';
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'exportadores-alert',
+            });
+            if (!open.data.some((i) => i.title === title)) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                labels: ['exportadores-alert'],
+                body: body.join('\n'),
+              });
+            }
+
+  crawl:
+    if: github.event_name == 'workflow_dispatch' && inputs.crawl == true
+    runs-on: ubuntu-latest
+    # CLOUDFLARE_API_TOKEN y CLOUDFLARE_ACCOUNT_ID salen de este environment:
+    # mientras el dataset no se commitee, este job es el que publica en R2.
+    environment: prod
+    timeout-minutes: 180
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm build
+
+      # Los inputs entran por `env` y no interpolados en el script: un valor con
+      # comillas o `;` lo ejecutaría el shell si se pegara en el `run`.
+      - name: Recorrer el directorio
+        env:
+          LIMIT: ${{ inputs.limit || '' }}
+          IDS: ${{ inputs.ids || '' }}
+        run: |
+          set -euo pipefail
+          ARGS=(exportadores crawl)
+          if [ -n "$LIMIT" ]; then ARGS+=(--limit "$LIMIT"); fi
+          if [ -n "$IDS" ]; then ARGS+=(--ids "$IDS"); fi
+          node apps/scraper/dist/index.js "${ARGS[@]}"
+
+      # Mientras el dataset esté en .gitignore (ver el comentario de ese
+      # archivo), no se redistribuye el bulk: se publica sólo en R2, que es de
+      # donde el MCP lo sirve para consulta. Cuando se borre esa línea, pasa a
+      # commitearse como las otras colecciones.
+      - name: ¿El dataset se commitea o va sólo a R2?
+        id: dataset
+        run: |
+          if git check-ignore -q data/exportadores; then
+            echo "ignored=true" >> "$GITHUB_OUTPUT"
+            echo "data/exportadores está en .gitignore: publico sólo en R2."
+          else
+            echo "ignored=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publicar en R2 sin commitear
+        if: steps.dataset.outputs.ignored == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node apps/worker/scripts/sync-r2.mjs --ensure-bucket
+
+      - name: Verificar que el MCP ya sirve el directorio
+        if: steps.dataset.outputs.ignored == 'true'
+        env:
+          PROD_URL: ${{ vars.PROD_URL }}
+        run: |
+          set -euo pipefail
+          BASE="${PROD_URL:-https://cordobamcp.com}"
+          case "$BASE" in http://* | https://*) ;; *) BASE="https://$BASE" ;; esac
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "$BASE/health" \
+              | jq -e '[.collections[] | select(.id == "exportadores") | .available] == [true]' > /dev/null; then
+              echo "$BASE sirviendo exportadores (intento $i)"
+              exit 0
+            fi
+            echo "intento $i: todavía no; reintento en 15s"
+            sleep 15
+          done
+          echo "::error::$BASE no está sirviendo la colección exportadores"
+          curl -fsS --max-time 10 "$BASE/health" || true
+          exit 1
+
+      - name: Commitear data/exportadores
+        id: commit
+        if: steps.dataset.outputs.ignored == 'false'
+        run: |
+          git config user.name "agenda-bot"
+          git config user.email "agenda-bot@users.noreply.github.com"
+          # Sólo el dataset normalizado: `data/raw/` está ignorado a propósito.
+          git add data/exportadores
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Sin cambios en data/exportadores."
+          else
+            git commit -m "data: directorio de exportadores $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resumen
+        if: always()
+        run: |
+          {
+            echo "### Directorio de exportadores"
+            echo
+            echo "- Empresas publicadas: $(wc -l < data/exportadores/companies.jsonl)"
+            echo "- Fichas en el directorio: $(jq -r '.directory_total' data/exportadores/status.json)"
+            echo "- Excluidas por ser personas humanas: $(jq -r '.excluded_natural_persons' data/exportadores/status.json)"
+            echo "- Con sitio web: $(jq -r '.with_website' data/exportadores/status.json)"
+            echo "- Validación: $(jq -r '.validation.status' data/exportadores/status.json)"
+            echo "- Commiteado: ${{ steps.commit.outputs.changed }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Subir a R2 es lo que publica el dato: el Worker lo lee de ahí, así que esto
+  # no necesita un deploy. Los push con GITHUB_TOKEN no disparan workflows, por
+  # eso se llama explícitamente.
+  publicar:
+    needs: crawl
+    if: needs.crawl.outputs.changed == 'true'
+    uses: ./.github/workflows/sync-data.yml
+    secrets: inherit

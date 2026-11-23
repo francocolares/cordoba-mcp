@@ -6,12 +6,14 @@
 import type { Collection } from "../collections.js";
 import { DataError } from "../errors.js";
 import { eventos } from "./eventos.js";
+import { exportadores } from "./exportadores.js";
 import { farmaciasTurno } from "./farmaciasTurno.js";
 
 export * from "./eventos.js";
+export * from "./exportadores.js";
 export * from "./farmaciasTurno.js";
 
-export const COLLECTIONS: readonly Collection<unknown>[] = [eventos, farmaciasTurno];
+export const COLLECTIONS: readonly Collection<unknown>[] = [eventos, farmaciasTurno, exportadores];
 
 export const COLLECTION_IDS: readonly string[] = COLLECTIONS.map((c) => c.descriptor.id);
 

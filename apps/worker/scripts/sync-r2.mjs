@@ -39,6 +39,12 @@ export const COLLECTION_FILES = {
       "status.json": { path: "status.json", contentType: "application/json" },
     },
   },
+  exportadores: {
+    records: { path: "exportadores/companies.jsonl", contentType: "application/x-ndjson" },
+    extras: {
+      "status.json": { path: "exportadores/status.json", contentType: "application/json" },
+    },
+  },
   farmacias_turno: {
     records: { path: "farmacias/pharmacies.jsonl", contentType: "application/x-ndjson" },
     extras: {

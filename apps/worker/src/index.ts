@@ -66,12 +66,14 @@ const json = (body: unknown, init: ResponseInit = {}) =>
 const toJsonl = (rows: unknown[]): string =>
   `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;
 
-const ndjson = (rows: unknown[]) =>
+const ndjson = (rows: unknown[], init: ResponseInit = {}) =>
   new Response(toJsonl(rows), {
+    ...init,
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "public, max-age=300",
       ...CORS,
+      ...(init.headers ?? {}),
     },
   });
 
@@ -160,6 +162,11 @@ function handleApi(path: string, snapshot: Snapshot): Response | null {
   if (rest === "") return null;
 
   const known = (id: string) => COLLECTIONS.some((c) => c.descriptor.id === id);
+  // La señal del origen viaja con el dato: ver `content_signal` del descriptor.
+  const signal = (id: string): Record<string, string> => {
+    const declared = COLLECTIONS.find((c) => c.descriptor.id === id)?.descriptor.content_signal;
+    return declared === undefined ? {} : { "content-signal": declared };
+  };
   const jsonlMatch = /^([a-z_]+)\.jsonl$/.exec(rest);
   if (jsonlMatch) {
     const id = jsonlMatch[1] as string;
@@ -167,7 +174,7 @@ function handleApi(path: string, snapshot: Snapshot): Response | null {
     const store = snapshot[id] ?? null;
     if (store === null)
       return json({ error: `La colección ${id} no está disponible` }, { status: 503 });
-    return ndjson(findCollection(id).dump(store).jsonl);
+    return ndjson(findCollection(id).dump(store).jsonl, { headers: signal(id) });
   }
 
   const parts = rest.split("/");
@@ -179,7 +186,7 @@ function handleApi(path: string, snapshot: Snapshot): Response | null {
     return json({ error: `La colección ${id} no está disponible` }, { status: 503 });
   }
   const extra = findCollection(id).dump(store).extras?.[file];
-  return extra === undefined ? null : json(extra);
+  return extra === undefined ? null : json(extra, { headers: signal(id) });
 }
 
 /**

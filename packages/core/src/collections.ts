@@ -58,6 +58,12 @@ export interface CollectionDescriptor {
   examples?: readonly string[];
   /** Advertencias del dominio (supuestos, precisión). Van a `notes`. */
   notes?: readonly string[];
+  /**
+   * Señal de contenido que declara el origen (`Content-Signal` de su
+   * robots.txt). La propagamos tal cual en las respuestas de datos: republicar
+   * no es excusa para perder la reserva de derechos de quien publicó primero.
+   */
+  content_signal?: string;
 }
 
 /** Texto crudo de los archivos de una colección, por nombre. */

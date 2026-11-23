@@ -15,6 +15,7 @@ import {
   validateSource,
 } from "@cordoba/core";
 
+import { type ExportadoresArgs, runCheck, runCrawl, runImport } from "./exportadores.js";
 import { type FarmaciasArgs, runGeocode, runIngest } from "./farmacias.js";
 
 const USAGE = `uso: cordoba-scraper <comando> [opciones]
@@ -29,13 +30,20 @@ farmacias de turno (Colegio de Farmacéuticos):
   farmacias ingest     parsea, valida y persiste data/farmacias/
   farmacias geocode    geocodifica lo que falta y actualiza la cache
 
+directorio de exportadores (Agencia ProCórdoba):
+  exportadores check     baja sólo el listado (1 request) y dice si cambió
+  exportadores import    ingesta un consolidado ya scrapeado (--file)
+  exportadores validate  igual que import, sin escribir nada
+  exportadores crawl     recorre el directorio ficha por ficha y persiste
+
 opciones:
   --data <dir>     directorio de datos (default: data)
   --file <path>    .xlsx del turnero (default: el snapshot commiteado)
   --url <url>      bajar el turnero de otra URL
   --download       ignorar el snapshot y bajar el turnero de Drive
   --year <aaaa>    año esperado del turnero
-  --limit <n>      máximo de direcciones a geocodificar en esta tanda (pasada Nominatim)
+  --limit <n>      máximo de fichas o direcciones a procesar en esta tanda
+  --ids <a,b,c>    sólo estas fichas del directorio de exportadores
   --retry-failed   reintentar las direcciones que no resolvieron
   --skip-georef    saltear la pasada por lotes de Georef
   --skip-nominatim saltear la pasada de Nominatim (la lenta)
@@ -49,6 +57,7 @@ interface Args {
   url?: string | undefined;
   year?: number | undefined;
   limit?: number | undefined;
+  ids?: string[] | undefined;
   download: boolean;
   retryFailed: boolean;
   skipGeoref: boolean;
@@ -59,6 +68,15 @@ function parseArgs(argv: string[]): Args {
   const flag = (name: string): string | undefined => {
     const index = argv.indexOf(`--${name}`);
     return index >= 0 ? argv[index + 1] : undefined;
+  };
+  const list = (name: string): string[] | undefined => {
+    const value = flag(name);
+    if (value === undefined) return undefined;
+    const ids = value
+      .split(",")
+      .map((id) => id.trim())
+      .filter((id) => id !== "");
+    return ids.length === 0 ? undefined : ids;
   };
   const number = (name: string): number | undefined => {
     const value = flag(name);
@@ -74,6 +92,7 @@ function parseArgs(argv: string[]): Args {
     url: flag("url"),
     year: number("year"),
     limit: number("limit"),
+    ids: list("ids"),
     download: argv.includes("--download"),
     retryFailed: argv.includes("--retry-failed"),
     skipGeoref: argv.includes("--skip-georef"),
@@ -139,6 +158,21 @@ async function main(): Promise<number> {
     if (args.subcommand === "ingest") return runIngest(farmaciasArgs, true);
     if (args.subcommand === "validate") return runIngest(farmaciasArgs, false);
     if (args.subcommand === "geocode") return runGeocode(farmaciasArgs);
+    process.stderr.write(USAGE);
+    return 2;
+  }
+
+  if (command === "exportadores") {
+    const exportadoresArgs: ExportadoresArgs = {
+      dataDir,
+      file: args.file,
+      limit: args.limit,
+      ids: args.ids,
+    };
+    if (args.subcommand === "check") return runCheck(exportadoresArgs);
+    if (args.subcommand === "import") return runImport(exportadoresArgs, true);
+    if (args.subcommand === "validate") return runImport(exportadoresArgs, false);
+    if (args.subcommand === "crawl") return runCrawl(exportadoresArgs, true);
     process.stderr.write(USAGE);
     return 2;
   }
