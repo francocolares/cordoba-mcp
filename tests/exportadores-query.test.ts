@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { exportadores } from "../packages/core/src/collections/exportadores.js";
+import { mergeExporters } from "../packages/core/src/exportadores/ingest.js";
 import type { Exporter } from "../packages/core/src/exportadores/models.js";
 import { envelope, type Snapshot, TOOLS } from "../packages/core/src/tools.js";
 
 const exporter = (over: Partial<Exporter> & { id: string; name: string }): Exporter => ({
   source: "procordoba",
-  url: `https://www.exportadoresdecordoba.com/single.php?search=${over.id}`,
+  url: `https://www.exportadoresdecordoba.com/single?search=${over.id}`,
   legal_name: `${over.name} S.A.`,
   logo_url: null,
   website: "https://empresa.test",
@@ -189,7 +190,7 @@ describe("search sobre exportadores", () => {
 
     const full = items(search({ query: "dulcor", fields: "full" }))[0]!;
     expect(full["restricted_fields"]).toEqual(["contacto"]);
-    expect(full["url"]).toMatch(/single\.php\?search=1$/);
+    expect(full["url"]).toMatch(/single\?search=1$/);
   });
 });
 
@@ -217,6 +218,30 @@ describe("get y taxonomías", () => {
     expect(taxonomies["pais_exporta"]).toEqual(
       expect.arrayContaining([{ key: "Brasil", count: 2 }]),
     );
+  });
+});
+
+describe("mergeExporters", () => {
+  const previo: Exporter[] = [
+    exporter({ id: "1", name: "SIGUE" }),
+    exporter({ id: "2", name: "SE FUE" }),
+    exporter({ id: "3", name: "NO SE PUDO TRAER" }),
+  ];
+  const AHORA = "2026-11-23T21:00:00.000Z";
+
+  it("da de baja lo que ya no está en el directorio", () => {
+    const { items, counts } = mergeExporters(previo, [previo[0]!], AHORA, false);
+    expect(counts.removed).toBe(2);
+    expect(items.filter((e) => e.active).map((e) => e.id)).toEqual(["1"]);
+  });
+
+  it("una ficha que falló no es una baja: conserva el dato anterior", () => {
+    const { items, counts, changes } = mergeExporters(previo, [previo[0]!], AHORA, false, ["3"]);
+    expect(counts.removed).toBe(1);
+    expect(changes.map((c) => c.id)).toEqual(["2"]);
+    const intacta = items.find((e) => e.id === "3")!;
+    expect(intacta.active).toBe(true);
+    expect(intacta.last_seen).toBe(previo[2]!.last_seen);
   });
 });
 

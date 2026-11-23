@@ -7,6 +7,7 @@
  * datos no necesita publicar el Worker de nuevo.
  *
  *   node apps/worker/scripts/sync-r2.mjs                  # contra R2 (credenciales del env)
+ *   node apps/worker/scripts/sync-r2.mjs --only=exportadores  # publica una sola colección
  *   node apps/worker/scripts/sync-r2.mjs --local          # contra el R2 simulado de `wrangler dev`
  *   node apps/worker/scripts/sync-r2.mjs --dry-run        # sólo dice qué subiría
  *   node apps/worker/scripts/sync-r2.mjs --ensure-bucket  # crea el bucket si no existe
@@ -146,8 +147,28 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const dataDir = args.find((a) => a.startsWith("--data-dir="))?.split("=")[1];
 
   const ensureBucket = args.includes("--ensure-bucket");
+  // `--only a,b` publica sólo esas colecciones y deja las demás como están
+  // arriba. Es lo que hace segura una publicación desde una máquina local, cuyo
+  // `data/` puede estar atrasado respecto de lo que ya se publicó.
+  const onlyFlag = args.indexOf("--only");
+  const only = [
+    ...args.filter((a) => a.startsWith("--only=")).map((a) => a.slice("--only=".length)),
+    ...(onlyFlag >= 0 ? [args[onlyFlag + 1] ?? ""] : []),
+  ]
+    .flatMap((value) => value.split(","))
+    .map((id) => id.trim())
+    .filter(Boolean);
   const bucket = bucketName();
-  const { manifest, objects } = buildManifest(dataDir ? resolve(dataDir) : undefined);
+  let { manifest, objects } = buildManifest(dataDir ? resolve(dataDir) : undefined);
+
+  const desconocidas = only.filter((id) => !(id in manifest.collections));
+  if (desconocidas.length > 0) {
+    console.error(
+      `[sync-r2] --only: no encontré en ${dataDir ?? "data/"} la(s) colección(es) ` +
+        `${desconocidas.join(", ")}. Hay: ${Object.keys(manifest.collections).join(", ") || "ninguna"}.`,
+    );
+    process.exit(1);
+  }
   const scope = local ? "--local" : "--remote";
 
   if (Object.keys(manifest.collections).length === 0) {
@@ -202,6 +223,35 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   } else {
     console.log("[sync-r2] sin manifest previo (primera carga o bucket nuevo).");
+  }
+
+  // Con `--only`, lo que no se publica se toma del manifest que ya está arriba:
+  // reescribirlo con lo que haya en el `data/` local sería publicar de prepo.
+  if (only.length > 0) {
+    if (previous === null) {
+      console.error(
+        "[sync-r2] --only necesita leer el manifest que ya está arriba y no pude: " +
+          "sin él no sé qué dejar como está. Revisá que el token tenga Workers R2 Storage: Edit.",
+      );
+      process.exit(1);
+    }
+    const conservadas = {};
+    for (const [id, entry] of Object.entries(previous.collections ?? {})) {
+      if (!only.includes(id)) conservadas[id] = entry;
+    }
+    manifest = {
+      ...manifest,
+      collections: Object.fromEntries(
+        Object.entries(manifest.collections)
+          .filter(([id]) => only.includes(id))
+          .concat(Object.entries(conservadas)),
+      ),
+    };
+    objects = objects.filter((o) => only.some((id) => o.key.startsWith(`${id}/`)));
+    const intactas = Object.keys(conservadas);
+    console.log(
+      `[sync-r2] --only ${only.join(", ")}: dejo como están ${intactas.join(", ") || "ninguna"}.`,
+    );
   }
 
   const hashesArriba = new Set();

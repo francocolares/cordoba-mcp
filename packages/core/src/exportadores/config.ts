@@ -5,7 +5,7 @@ export const EXPORTADORES_SOURCE_NAME =
 
 export const EXPORTADORES_BASE = "https://www.exportadoresdecordoba.com" as const;
 
-export const EXPORTADORES_SOURCE_URL = `${EXPORTADORES_BASE}/directorio.php`;
+export const EXPORTADORES_SOURCE_URL = `${EXPORTADORES_BASE}/directorio`;
 
 export const EXPORTADORES_CONTENT_SIGNAL = "search=yes, ai-train=no, use=reference";
 
@@ -16,7 +16,7 @@ export const EXPORTADORES_LICENSE =
 export const EXPORTADORES_ATTRIBUTION = `Datos del Directorio de Exportadores de la Agencia ProCórdoba (${EXPORTADORES_BASE})`;
 
 export const companyUrl = (externalId: string): string =>
-  `${EXPORTADORES_BASE}/single.php?search=${externalId}`;
+  `${EXPORTADORES_BASE}/single?search=${externalId}`;
 
 export const EXPORTER_PROFILES = [
   "Exportadora Habitual",

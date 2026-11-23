@@ -84,6 +84,7 @@ export async function runCrawl(args: ExportadoresArgs, persist: boolean): Promis
     directoryTotal: crawl.directoryTotal,
     directoryIds: crawl.directoryIds,
     partial: crawl.partial,
+    unvisited: crawl.failed.map((failure) => failure.id),
     warnings: crawl.warnings,
     paths: exportadoresPaths(args.dataDir),
     persist,

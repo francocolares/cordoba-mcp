@@ -9,7 +9,6 @@ import type { DirectoryListingEntry, Ficha } from "./parse.js";
 
 export interface ExporterInput {
   externalId: string;
-  url: string;
   withoutContent: boolean;
   name: string | null;
   legalName: string | null;
@@ -52,7 +51,6 @@ export function toInstant(value: string | null): string | null {
 export function fichaToInput(ficha: Ficha, entry?: DirectoryListingEntry): ExporterInput {
   return {
     externalId: ficha.externalId,
-    url: ficha.url,
     withoutContent: ficha.withoutContent,
     name: nullable(ficha.name ?? entry?.name),
     legalName: nullable(ficha.legalName ?? entry?.legalName),
@@ -80,7 +78,6 @@ const RawOfferSchema = z.union([
 const RawCompanySchema = z
   .object({
     id: z.union([z.number().int(), z.string()]),
-    url: z.string().nullable().optional(),
     sin_contenido: z.boolean().optional(),
     nombre: z.string().nullable().optional(),
     razon_social: z.string().nullable().optional(),
@@ -123,7 +120,6 @@ export function readDirectorioFile(payload: unknown): DirectorioFileContents {
     const externalId = String(company.id);
     return {
       externalId,
-      url: nullable(company.url) ?? companyUrl(externalId),
       withoutContent: company.sin_contenido === true,
       name: nullable(company.nombre),
       legalName: nullable(company.razon_social),
@@ -199,7 +195,7 @@ export function toExporters(
     const withoutHash = {
       id: input.externalId,
       source: EXPORTADORES_SOURCE_ID,
-      url: input.url,
+      url: companyUrl(input.externalId),
       name: input.name,
       legal_name: input.legalName,
       logo_url: input.logoUrl,

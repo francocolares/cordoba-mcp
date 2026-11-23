@@ -21,7 +21,7 @@ describe("parseDirectoryListing", () => {
     expect(entries).toHaveLength(4);
     expect(entries[0]).toEqual({
       externalId: "4293",
-      url: "https://www.exportadoresdecordoba.com/single.php?search=4293",
+      url: "https://www.exportadoresdecordoba.com/single?search=4293",
       name: "384 IMPULSORES DE NEGOCIOS",
       legalName: "384 FRANQUICIAS Y PYMES S.A.S.",
       label: "EXPORTA HABITUALMENTE",
@@ -31,6 +31,15 @@ describe("parseDirectoryListing", () => {
         { id: 93, name: "Servicios Profesionales" },
       ],
     });
+  });
+
+  it("acepta los links sin .php, que es a donde redirige el sitio", () => {
+    const entries = parseDirectoryListing(
+      LISTING.replaceAll("single.php?search=", "single?search="),
+    );
+    expect(entries.map((e) => e.externalId)).toEqual(
+      parseDirectoryListing(LISTING).map((e) => e.externalId),
+    );
   });
 
   it("no devuelve nada cuando el template cambió", () => {
@@ -95,7 +104,6 @@ describe("isNaturalPerson", () => {
 });
 
 const input = (over: Partial<ExporterInput> & { externalId: string }): ExporterInput => ({
-  url: `https://www.exportadoresdecordoba.com/single.php?search=${over.externalId}`,
   withoutContent: false,
   name: "EMPRESA",
   legalName: "EMPRESA S.A.",
@@ -164,7 +172,6 @@ describe("readDirectorioFile", () => {
       empresas: [
         {
           id: 1378,
-          url: "https://www.exportadoresdecordoba.com/single.php?search=1378",
           sin_contenido: false,
           nombre: "+LATINA",
           razon_social: "GRAFICA LATINA SRL",
@@ -195,6 +202,9 @@ describe("readDirectorioFile", () => {
     const { exporters, excluded } = toExporters(inputs, NOW);
     expect(exporters.map((e) => e.name)).toEqual(["+LATINA"]);
     expect(excluded.withoutContent).toBe(1);
+    // La URL se deriva del id, no se copia: el consolidado viejo trae las
+    // `.php`, que hoy redirigen.
+    expect(exporters[0]?.url).toBe("https://www.exportadoresdecordoba.com/single?search=1378");
   });
 
   it("falla si el archivo no tiene la forma esperada", () => {

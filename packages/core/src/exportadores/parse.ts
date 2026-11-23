@@ -36,7 +36,7 @@ function isMasked(value: string | undefined): boolean {
 }
 
 const CARD_START = '<div class="col-xs-6 col-sm-3 panel-body directorio">';
-const CARD_ID = /single\.php\?search=(\d+)/;
+const CARD_ID = /single(?:\.php)?\?search=(\d+)/;
 const CARD_NAME = /<p class="directorio-nombre">([\s\S]*?)<\/p>/;
 const CARD_LEGAL_NAME = /<p class="directorio-razon">([\s\S]*?)<\/p>/;
 const CARD_LABEL = /<span class="badge etiqueta-flotante-\w+">([\s\S]*?)<\/span>/;

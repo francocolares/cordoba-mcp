@@ -24,6 +24,12 @@ export interface IngestExportadoresOptions {
   inputs: readonly ExporterInput[];
   directoryTotal: number;
   directoryIds?: readonly string[] | undefined;
+  /**
+   * Fichas que este recorrido no pudo traer. No son bajas: conservan el dato
+   * del recorrido anterior, porque un 522 del origen no es una empresa que se
+   * fue del directorio.
+   */
+  unvisited?: readonly string[] | undefined;
   crawledAt?: string | null | undefined;
   partial?: boolean;
   paths?: ExportadoresPaths;
@@ -64,10 +70,13 @@ export function mergeExporters(
   fetched: readonly Exporter[],
   now: string,
   partial: boolean,
+  unvisited: readonly string[] = [],
 ): MergeOutcome {
   const fetchedIds = new Set(fetched.map((e) => e.id));
-  const visited = partial ? previous.filter((e) => fetchedIds.has(e.id)) : previous;
-  const untouched = partial ? previous.filter((e) => !fetchedIds.has(e.id)) : [];
+  const skipped = new Set(unvisited);
+  const seen = (exporter: Exporter) => fetchedIds.has(exporter.id) || !skipped.has(exporter.id);
+  const visited = previous.filter((e) => (partial ? fetchedIds.has(e.id) : seen(e)));
+  const untouched = previous.filter((e) => (partial ? !fetchedIds.has(e.id) : !seen(e)));
 
   const merged = mergeEntities<Exporter>([...visited], [...fetched], now, {
     contentFields: EXPORTER_SCALAR_FIELDS,
@@ -107,6 +116,7 @@ export async function ingestExportadores(
     previous: previousStatus,
     at: nowIso,
     partial,
+    unvisited: options.unvisited?.length ?? 0,
   });
 
   const source = `${EXPORTADORES_SOURCE_NAME} (${EXPORTADORES_SOURCE_ID})`;
@@ -138,7 +148,7 @@ export async function ingestExportadores(
     };
   }
 
-  const merged = mergeExporters(previous, exporters, nowIso, partial);
+  const merged = mergeExporters(previous, exporters, nowIso, partial, options.unvisited ?? []);
 
   const status: ExportadoresStatus = {
     last_run: nowIso,

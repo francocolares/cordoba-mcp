@@ -22,6 +22,7 @@ export interface ValidateExportersInput {
   previous?: ExportadoresStatus | null;
   at?: string;
   partial?: boolean;
+  unvisited?: number;
 }
 
 function worst(checks: readonly Check[]): ValidationResult["status"] {
@@ -146,6 +147,17 @@ export function validateExporters(input: ValidateExportersInput): ValidationResu
       .map(([field, value]) => `${field} ${Math.round(value * 100)}%`)
       .join(", "),
   });
+
+  const unvisited = input.unvisited ?? 0;
+  if (unvisited > 0) {
+    checks.push({
+      level: "warn",
+      code: "fichas_no_visitadas",
+      message:
+        `${unvisited} ficha(s) no se pudieron traer en este recorrido: conservan el dato del ` +
+        "recorrido anterior en vez de darse de baja",
+    });
+  }
 
   if (partial) {
     checks.push({
