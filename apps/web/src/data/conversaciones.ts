@@ -164,25 +164,25 @@ export const conversaciones: Conversacion[] = [
   {
     id: "exportadores",
     etiqueta: "Exportadores",
-    proximamente: true,
-    caso: "El Directorio de Exportadores de la Agencia ProCórdoba: son 2.658 fichas públicas, una por página, con los rubros y los países cargados como texto libre.",
+    proximamente: false,
+    caso: null,
     chat: {
       pregunta: "Necesito proveedores de Córdoba que ya exporten aceite de maní a Europa.",
-      intro: "Hay 14 fichas que cumplen las dos cosas. Dos para empezar:",
+      intro: "Hay diez fichas con aceite de maní en la oferta y destinos en la Unión Europea. Dos:",
       items: [
         {
-          titulo: "Aceites del Centro",
-          meta: "General Cabrera · aceite de maní crudo y refinado · exporta a Países Bajos, Alemania y España",
-          etiqueta: "exporta a la UE",
+          titulo: "PRODEMAN S.A. - MANÍ KING",
+          meta: "Aceites y oleaginosas · aceite de maní, maní confitería y pasta de maní · exporta a 22 países, entre ellos Alemania, Francia, Países Bajos y Polonia",
+          etiqueta: "con catálogo",
         },
         {
-          titulo: "Maní Río Cuarto",
-          meta: "Río Cuarto · maní blancheado, pasta y aceite · exporta a Italia, Polonia y Reino Unido",
-          etiqueta: "con catálogo",
+          titulo: "MANIAGRO ARGENTINA",
+          meta: "Aceites y oleaginosas · aceite de maní, maní blancheado y maní tostado · exporta a 48 países, entre ellos España, Italia, Suecia y Rumania",
+          etiqueta: "exporta habitualmente",
         },
       ],
       cierre:
-        "Te las puedo filtrar por departamento, por rubro o por las que tengan sitio web y contacto cargado.",
+        "Las puedo filtrar por rubro, por país de destino o por las que publican sitio web. El directorio no publica datos de contacto: para eso hay que entrar a la ficha de ProCórdoba.",
     },
   },
   {

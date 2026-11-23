@@ -222,7 +222,7 @@ export const fuentes: Fuente[] = [
     icono: "container",
     organismo: "Agencia ProCórdoba",
     enlace: "https://www.exportadoresdecordoba.com/",
-    lista: false,
+    lista: true,
   },
   {
     id: "catastro",
