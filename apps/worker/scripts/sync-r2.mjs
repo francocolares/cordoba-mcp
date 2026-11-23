@@ -127,6 +127,36 @@ export function buildManifest(dataDir = join(repoRoot, "data"), now = new Date()
   return { manifest, objects };
 }
 
+export function planPublication({ manifest, objects, previous, only = [] }) {
+  const publicadas = Object.entries(previous?.collections ?? {});
+  const heredadas = publicadas.filter(([id]) =>
+    only.length > 0 ? !only.includes(id) : !(id in manifest.collections),
+  );
+  const sinDatosLocales = heredadas
+    .filter(([id]) => !(id in manifest.collections))
+    .map(([id]) => id);
+
+  return {
+    manifest: {
+      ...manifest,
+      collections: {
+        ...(only.length > 0
+          ? Object.fromEntries(
+              Object.entries(manifest.collections).filter(([id]) => only.includes(id)),
+            )
+          : manifest.collections),
+        ...Object.fromEntries(heredadas),
+      },
+    },
+    objects:
+      only.length > 0
+        ? objects.filter((o) => only.some((id) => o.key.startsWith(`${id}/`)))
+        : objects,
+    conservadas: heredadas.map(([id]) => id),
+    sinDatosLocales,
+  };
+}
+
 /** Lee el nombre del bucket del wrangler.jsonc, para no duplicarlo acá. */
 export function bucketName(configPath = join(workerDir, "wrangler.jsonc")) {
   const raw = readFileSync(configPath, "utf8")
@@ -225,32 +255,27 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log("[sync-r2] sin manifest previo (primera carga o bucket nuevo).");
   }
 
-  // Con `--only`, lo que no se publica se toma del manifest que ya está arriba:
-  // reescribirlo con lo que haya en el `data/` local sería publicar de prepo.
+  if (only.length > 0 && previous === null) {
+    console.error(
+      "[sync-r2] --only necesita leer el manifest que ya está arriba y no pude: " +
+        "sin él no sé qué dejar como está. Revisá que el token tenga Workers R2 Storage: Edit.",
+    );
+    process.exit(1);
+  }
+
+  const plan = planPublication({ manifest, objects, previous, only });
+  manifest = plan.manifest;
+  objects = plan.objects;
   if (only.length > 0) {
-    if (previous === null) {
-      console.error(
-        "[sync-r2] --only necesita leer el manifest que ya está arriba y no pude: " +
-          "sin él no sé qué dejar como está. Revisá que el token tenga Workers R2 Storage: Edit.",
-      );
-      process.exit(1);
-    }
-    const conservadas = {};
-    for (const [id, entry] of Object.entries(previous.collections ?? {})) {
-      if (!only.includes(id)) conservadas[id] = entry;
-    }
-    manifest = {
-      ...manifest,
-      collections: Object.fromEntries(
-        Object.entries(manifest.collections)
-          .filter(([id]) => only.includes(id))
-          .concat(Object.entries(conservadas)),
-      ),
-    };
-    objects = objects.filter((o) => only.some((id) => o.key.startsWith(`${id}/`)));
-    const intactas = Object.keys(conservadas);
     console.log(
-      `[sync-r2] --only ${only.join(", ")}: dejo como están ${intactas.join(", ") || "ninguna"}.`,
+      `[sync-r2] --only ${only.join(", ")}: dejo como están ` +
+        `${plan.conservadas.join(", ") || "ninguna"}.`,
+    );
+  }
+  if (plan.sinDatosLocales.length > 0) {
+    console.log(
+      `[sync-r2] sin datos locales de ${plan.sinDatosLocales.join(", ")}: conservo la entrada ` +
+        "que ya estaba publicada, porque un dataset no se despublica por faltar en el checkout.",
     );
   }
 
